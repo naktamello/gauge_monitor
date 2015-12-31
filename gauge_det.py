@@ -125,10 +125,12 @@ def main():
             thisObject = objects.pop()
             # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
             cv2.drawContours(blank, contours, thisObject.position, DEF.WHITE, 5, 2)
+    #cv2.imshow(window_name, blank)
+    #cv2.waitKey(0)
 
     if hough_line:
         blank = cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY)
-        lines = cv2.HoughLines(blank, 1, np.pi / 90, 50)
+        lines = cv2.HoughLines(blank, 3, np.pi / 90, 95)
     if hough_pline:
         plines = cv2.HoughLinesP(prep, 1, np.pi / 180, 20, None, minLineLength=height / 10, maxLineGap=1)
 
