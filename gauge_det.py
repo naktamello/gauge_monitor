@@ -59,6 +59,8 @@ def main():
     np.copyto(canvas, im)
     prep = gray_im  # copy of grayscale image to be preprocessed for angle detection
     height, width = gray_im.shape
+    assert height == 480
+    assert width == 720
     mask = np.zeros_like(prep)
     scale_factor = 1.15
 
@@ -125,8 +127,6 @@ def main():
             thisObject = objects.pop()
             # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
             cv2.drawContours(blank, contours, thisObject.position, DEF.WHITE, 5, 2)
-    #cv2.imshow(window_name, blank)
-    #cv2.waitKey(0)
 
     if hough_line:
         blank = cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY)
