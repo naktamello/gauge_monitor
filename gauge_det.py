@@ -2,9 +2,30 @@
 import sys
 import math
 import numpy as np
+import os, platform, subprocess, re
 import cv2
-import defines as DEF
 
+#user modules
+import defines as DEF
+#import temp_sensor
+
+import os, platform, subprocess, re
+
+def get_processor_name():
+    if platform.system() == "Windows":
+        return platform.processor()
+    elif platform.system() == "Darwin":
+        import os
+        os.environ['PATH'] = os.environ['PATH'] + os.pathsep + '/usr/sbin'
+        command ="sysctl -n machdep.cpu.brand_string"
+        return subprocess.check_output(command).strip()
+    elif platform.system() == "Linux":
+        command = "cat /proc/cpuinfo"
+        all_info = subprocess.check_output(command, shell=True).strip()
+        for line in all_info.split("\n"):
+            if "model name" in line:
+                return re.sub( ".*model name.*:", "", line,1)
+    return ""
 
 def make_line(p1, p2):
     A = (p1[1] - p2[1])
@@ -37,8 +58,30 @@ class Object:
 
 
 def main():
+    processor = get_processor_name()
+    print processor
+    if "ARMv7" in processor:
+        print "running on Raspberry Pi 2"
+        import temp_sensor
+        import RPi.GPIO as GPIO
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(17, GPIO.OUT)
+        from picamera import PiCamera
+        camera = PiCamera
+        camera.resolution = (720,480)
+        running_on_pi = True
+    else:
+        print "running on Desktop"
+        running_on_pi = False
+
     # parameters
-    file = "./test.jpg"
+    if running_on_pi:
+        GPIO.output(17, True)
+        camera.capture('capture.jpg')
+        GPIO.output(17, False)
+        gauge_image = "./capture.jpg"
+    else:
+        gauge_image = "./test.jpg"
     draw = True
     hough_circle = True
     hough_line = True
@@ -51,8 +94,9 @@ def main():
     line_thickness = 2
 
     # setup
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    im = cv2.imread(file)
+    if not running_on_pi:
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    im = cv2.imread(gauge_image)
     gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     canvas = np.zeros_like(im)  # output image
     blank = np.zeros_like(im)
@@ -159,6 +203,14 @@ def main():
             needle_lines.append(make_line(pt1, pt2))
             angles.append(theta)
 
+    angle0_degrees = (angles[0] * 360 / (2 * np.pi))
+    angle1_degrees = (angles[1] * 360 / (2 * np.pi))
+    angle_difference = abs(angle0_degrees - angle1_degrees)
+    print "angle1: ",angle0_degrees
+    print "angle2: ",angle1_degrees
+    print "angle difference", angle_difference
+    assert (angle_difference>(DEF.NEEDLE_SHAPE-0.5)) and (angle_difference<(DEF.NEEDLE_SHAPE+0.5))
+
     avg_theta = (angles[0] + angles[1]) / 2
     assert (len(needle_lines) >= 2)
     R = intersection(needle_lines[0], needle_lines[1])
@@ -201,10 +253,13 @@ def main():
 
     if draw:
         canvas = np.concatenate((im, canvas), axis=1)
-        cv2.imshow(window_name, canvas)
+        image_to_show = canvas
     else:
-        cv2.imshow(window_name, prep)
-    cv2.waitKey(0)
+        image_to_show = prep
+
+    if not running_on_pi:
+        cv2.imshow(window_name, image_to_show)
+        cv2.waitKey(0)
 
     # save the resulting image
     if draw:

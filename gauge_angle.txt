@@ -1,1 +1,1 @@
-angle:110.999999674\width
+angle:86.9999990059\width
