@@ -65,6 +65,7 @@ def main():
         import temp_sensor
         subprocess.call("gpio mode 0 out", shell=True)
         from picamera import PiCamera
+        import picamera.array
         camera = PiCamera()
         camera.resolution = (720,480)
         running_on_pi = True
@@ -75,7 +76,10 @@ def main():
     # parameters
     if running_on_pi:
         subprocess.call("gpio write 0 1", shell=True)
-        gauge_image = camera.capture()
+        camera.start_preview()
+        with picamera.array.PiRGBArray(camera) as stream:
+            camera.capture(stream, format='bgr')
+            gauge_image = stream.array
         subprocess.call("gpio write 0 0", shell=True)
     else:
         gauge_image = "./test.jpg"
