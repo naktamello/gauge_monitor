@@ -65,7 +65,7 @@ def main():
         import temp_sensor
         subprocess.call("gpio mode 0 out", shell=True)
         from picamera import PiCamera
-        camera = PiCamera
+        camera = PiCamera()
         camera.resolution = (720,480)
         running_on_pi = True
     else:
