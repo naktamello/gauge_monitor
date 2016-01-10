@@ -63,7 +63,7 @@ def main():
     if "ARMv7" in processor:
         print "running on Raspberry Pi 2"
         import temp_sensor
-        subprocess.call("gpio mode 0 out")
+        subprocess.call("gpio mode 0 out", shell=True)
         from picamera import PiCamera
         camera = PiCamera
         camera.resolution = (720,480)
@@ -74,9 +74,9 @@ def main():
 
     # parameters
     if running_on_pi:
-        subprocess.call("gpio write 0 1")
+        subprocess.call("gpio write 0 1", shell=True)
         camera.capture('capture.jpg')
-        subprocess.call("gpio write 0 0")
+        subprocess.call("gpio write 0 0", shell=True)
         gauge_image = "./capture.jpg"
     else:
         gauge_image = "./test.jpg"
