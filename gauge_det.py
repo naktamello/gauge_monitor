@@ -194,16 +194,19 @@ def main():
 
     needle_lines = []
     angles = []
-    for line in lines[:2]:
-        for (rho, theta) in line:
-            # blue for infinite lines (only draw the 2 strongest)
-            x0 = np.cos(theta) * rho
-            y0 = np.sin(theta) * rho
-            pt1 = (int(x0 + (height + width) * (-np.sin(theta))), int(y0 + (height + width) * np.cos(theta)))
-            pt2 = (int(x0 - (height + width) * (-np.sin(theta))), int(y0 - (height + width) * np.cos(theta)))
-            cv2.line(canvas, pt1, pt2, (255, 0, 0), line_thickness)
-            needle_lines.append(make_line(pt1, pt2))
-            angles.append(theta)
+    if lines is None:
+        sys.exit("there are no lines inside the cicle")  # if no lines are found terminate the program here
+    else:
+        for line in lines[:2]:
+            for (rho, theta) in line:
+                # blue for infinite lines (only draw the 2 strongest)
+                x0 = np.cos(theta) * rho
+                y0 = np.sin(theta) * rho
+                pt1 = (int(x0 + (height + width) * (-np.sin(theta))), int(y0 + (height + width) * np.cos(theta)))
+                pt2 = (int(x0 - (height + width) * (-np.sin(theta))), int(y0 - (height + width) * np.cos(theta)))
+                cv2.line(canvas, pt1, pt2, (255, 0, 0), line_thickness)
+                needle_lines.append(make_line(pt1, pt2))
+                angles.append(theta)
 
     angle0_degrees = (angles[0] * 360 / (2 * np.pi))
     angle1_degrees = (angles[1] * 360 / (2 * np.pi))
