@@ -75,9 +75,8 @@ def main():
     # parameters
     if running_on_pi:
         subprocess.call("gpio write 0 1", shell=True)
-        camera.capture('capture.jpg')
+        gauge_image = camera.capture()
         subprocess.call("gpio write 0 0", shell=True)
-        gauge_image = "./capture.jpg"
     else:
         gauge_image = "./test.jpg"
     draw = True
