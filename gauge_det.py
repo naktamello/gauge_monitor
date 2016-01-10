@@ -97,7 +97,8 @@ def main():
     # setup
     if not running_on_pi:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    im = cv2.imread(gauge_image)
+        im = cv2.imread(gauge_image)
+    im = gauge_image
     gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     canvas = np.zeros_like(im)  # output image
     blank = np.zeros_like(im)
