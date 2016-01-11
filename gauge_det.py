@@ -4,12 +4,13 @@ import math
 import numpy as np
 import os, platform, subprocess, re
 import cv2
-
-#user modules
+from matplotlib import pyplot as plt
+# user modules
 import defines as DEF
-#import temp_sensor
+# import temp_sensor
 
 import os, platform, subprocess, re
+
 
 def get_processor_name():
     if platform.system() == "Windows":
@@ -17,7 +18,7 @@ def get_processor_name():
     elif platform.system() == "Darwin":
         import os
         os.environ['PATH'] = os.environ['PATH'] + os.pathsep + '/usr/sbin'
-        command ="sysctl -n machdep.cpu.brand_string"
+        command = "sysctl -n machdep.cpu.brand_string"
         return subprocess.check_output(command).strip()
     elif platform.system() == "Linux":
         command = "cat /proc/cpuinfo"
@@ -27,12 +28,22 @@ def get_processor_name():
                 return re.sub( ".*model name.*:", "", line,1)
     return ""
 
-def make_line(p1, p2):
+
+def make_line(point_tuple):
+    p1 = point_tuple[0]
+    p2 = point_tuple[1]
     A = (p1[1] - p2[1])
     B = (p2[0] - p1[0])
     C = (p1[0] * p2[1] - p2[0] * p1[1])
     return A, B, -C
 
+
+def erode_n_dilate(image):
+    erode_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    dilate_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
+    image = cv2.erode(image, erode_element, 2)
+    image = cv2.dilate(image, dilate_element, 1)
+    return image
 
 def intersection(L1, L2):
     D = L1[0] * L2[1] - L1[1] * L2[0]
@@ -46,7 +57,24 @@ def intersection(L1, L2):
         return False
 
 
-class Object:
+def rad_to_degrees(radians):
+    degrees = (radians * 360 / (2 * np.pi))
+    return degrees
+
+
+def graph_histogram(in_image):
+    hist = cv2.calcHist([in_image], [0], None, [256], [0,256])
+    plt.figure()
+    plt.title("hist")
+    plt.xlabel("bins")
+    plt.ylabel("pixels")
+    plt.plot(hist)
+    plt.xlim([0,256])
+    plt.show()
+    cv2.waitKey(0)
+
+
+class Gauge:
     x = 0  # these will hold the coordinates of the object "centers". see moments of inertia
     y = 0
 
@@ -55,15 +83,17 @@ class Object:
         self.color = DEF.RED
         self.position = 0
         self.area = 0
+        self.lines = []
 
 
 def main():
+    # checks to see if we are running on raspberry pi2
     processor = get_processor_name()
     print processor
     if "ARMv7" in processor:
         print "running on Raspberry Pi 2"
         import temp_sensor
-        subprocess.call("gpio mode 0 out", shell=True)
+        subprocess.call("gpio mode 1 pwm", shell=True)
         from picamera import PiCamera
         import picamera.array
         camera = PiCamera()
@@ -74,58 +104,59 @@ def main():
         running_on_pi = False
 
     # parameters
-    if running_on_pi:
-        subprocess.call("gpio write 0 1", shell=True)
-        camera.start_preview()
-        with picamera.array.PiRGBArray(camera) as stream:
-            camera.capture(stream, format='bgr')
-            gauge_image = stream.array
-        subprocess.call("gpio write 0 0", shell=True)
-    else:
-        gauge_image = "./test.jpg"
     draw = True
     hough_circle = True
     hough_line = True
     hough_pline = False
-    do_canny = False
     do_blur = True
     do_threshold = True
     do_contours = True
     window_name = 'gauge'
     line_thickness = 2
+    gauge_needle = Gauge()
 
-    # setup
-    if not running_on_pi:
+    # setup image
+    if running_on_pi:
+        subprocess.call("gpio pwm 1 20", shell=True)
+        camera.start_preview()
+        with picamera.array.PiRGBArray(camera) as stream:
+            camera.capture(stream, format='bgr')
+            gauge_image = stream.array
+        subprocess.call("gpio pwm 1 0", shell=True)
+        im = gauge_image
+    else:
+        gauge_image = "./test.jpg"
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
         im = cv2.imread(gauge_image)
-    im = gauge_image
+
     gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
-    canvas = np.zeros_like(im)  # output image
-    blank = np.zeros_like(im)
-    np.copyto(canvas, im)
     prep = gray_im  # copy of grayscale image to be preprocessed for angle detection
+    mask = np.zeros_like(prep)
+    canvas = np.zeros_like(im)  # output image
+    np.copyto(canvas, im)
+    blank = np.zeros_like(im)
     height, width = gray_im.shape
     assert height == 480
     assert width == 720
-    mask = np.zeros_like(prep)
     scale_factor = 1.15
 
     # preprocessing image:
     if do_blur:
         prep = cv2.GaussianBlur(prep, (3, 3), 2, 2)
-    if do_canny:
-        prep = cv2.Canny(prep, 20, 60)
     if do_threshold:
         # create structuring element that will be used to "dilate" and "erode" image.
         # the element chosen here is a 3px by 3px rectangle
+        #prep = cv2.equalizeHist(prep)
+        #prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 5)
+        graph_histogram(prep)
+        prep = cv2.threshold(prep, 30, 255, cv2.THRESH_BINARY_INV)[1]
         prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 3)
-        # prep = cv2.threshold(prep, 50, 255, cv2.THRESH_BINARY_INV)[1]
-        erodeElement = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        # dilate with larger element so make sure object is nicely visible
-        dilateElement = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
-        prep = cv2.erode(prep, erodeElement, 2)
-        prep = cv2.dilate(prep, dilateElement, 1)
+        #prep = cv2.Canny(prep, 20, 60)
 
+    if not draw:
+        cv2.imshow(window_name, prep)
+        cv2.waitKey(0)
+        sys.exit("terminating early")
     # Hough transforms (circles, lines, plines)
     if hough_circle:
         # HoughCircles returns output vector (x,y,radius) inside an one element list so [0] is appended at the end
@@ -156,7 +187,7 @@ def main():
                     area = moment['m00']
                     if area > DEF.AREA:
                         # print("area = %d" % area)
-                        object = Object()
+                        object = gauge_needle
                         object.area = area
                         object.x = int(moment['m10'] / area)
                         object.y = int(moment['m01'] / area)
@@ -173,10 +204,11 @@ def main():
             thisObject = objects.pop()
             # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
             cv2.drawContours(blank, contours, thisObject.position, DEF.WHITE, 5, 2)
-
+    cv2.imshow(window_name, blank)
+    cv2.waitKey(0)
     if hough_line:
         blank = cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY)
-        lines = cv2.HoughLines(blank, 3, np.pi / 90, 95)
+        lines = cv2.HoughLines(prep, 3, np.pi / 90, 100)
     if hough_pline:
         plines = cv2.HoughLinesP(prep, 1, np.pi / 180, 20, None, minLineLength=height / 10, maxLineGap=1)
 
@@ -192,33 +224,47 @@ def main():
             circle_y = c[1]
             radius = int(c[2])
 
-    needle_lines = []
-    angles = []
+    angles_in_radians = []
+    angles_in_degrees = []
     if lines is None:
         sys.exit("there are no lines inside the cicle")  # if no lines are found terminate the program here
     else:
-        for line in lines[:2]:
+        for line in lines[:5]:
             for (rho, theta) in line:
                 # blue for infinite lines (only draw the 2 strongest)
                 x0 = np.cos(theta) * rho
                 y0 = np.sin(theta) * rho
                 pt1 = (int(x0 + (height + width) * (-np.sin(theta))), int(y0 + (height + width) * np.cos(theta)))
                 pt2 = (int(x0 - (height + width) * (-np.sin(theta))), int(y0 - (height + width) * np.cos(theta)))
-                cv2.line(canvas, pt1, pt2, (255, 0, 0), line_thickness)
-                needle_lines.append(make_line(pt1, pt2))
-                angles.append(theta)
+                gauge_needle.lines.append((pt1,pt2))
+                angles_in_radians.append(theta)
+                angles_in_degrees.append(rad_to_degrees(theta))
 
-    angle0_degrees = (angles[0] * 360 / (2 * np.pi))
-    angle1_degrees = (angles[1] * 360 / (2 * np.pi))
-    angle_difference = abs(angle0_degrees - angle1_degrees)
-    print "angle1: ",angle0_degrees
-    print "angle2: ",angle1_degrees
-    print "angle difference", angle_difference
-    assert (angle_difference>(DEF.NEEDLE_SHAPE-0.5)) and (angle_difference<(DEF.NEEDLE_SHAPE+0.5))
+    number_of_angles = len(angles_in_degrees)
+    for i in range(number_of_angles):
+        cur_angle = angles_in_degrees[i]
+        for j in range(number_of_angles):
+            if j == i:
+                continue
+            angle_diff = abs(cur_angle - angles_in_degrees[j])
+            print i, j, angle_diff
+            if (angle_diff>(DEF.NEEDLE_SHAPE-0.5)) and (angle_diff<(DEF.NEEDLE_SHAPE+0.5)):
+                angle_index = (i,j)
+                break
+        else:
+            pass
+        break
 
-    avg_theta = (angles[0] + angles[1]) / 2
-    assert (len(needle_lines) >= 2)
-    R = intersection(needle_lines[0], needle_lines[1])
+    assert (len(gauge_needle.lines) >= 2)
+    assert(angle_index is not None)
+
+    print "angle1: ",angles_in_degrees[angle_index[0]]
+    print "angle2: ",angles_in_degrees[angle_index[1]]
+    print "angle difference", angle_diff
+    #assert (angle_difference>(DEF.NEEDLE_SHAPE-0.5)) and (angle_difference<(DEF.NEEDLE_SHAPE+0.5))
+
+    avg_theta = (angles_in_radians[angle_index[0]] + angles_in_radians[angle_index[1]]) / 2
+    R = intersection(make_line(gauge_needle.lines[angle_index[0]]), make_line(gauge_needle.lines[angle_index[1]]))
     if R:
         print "Intersection detected:", R
         cv2.circle(canvas, R, 10, DEF.RED, 3)
@@ -247,6 +293,8 @@ def main():
     print "pressure = ", pressure
     prep = cv2.bitwise_and(prep, mask)
 
+    cv2.line(canvas, gauge_needle.lines[angle_index[0]][0], gauge_needle.lines[angle_index[0]][1], (255, 0, 0), line_thickness)
+    cv2.line(canvas, gauge_needle.lines[angle_index[1]][0], gauge_needle.lines[angle_index[1]][1], (255, 0, 0), line_thickness)
     cv2.putText(canvas, "pressure:" + str(round(pressure,3)) + " MPa", (int(height * 0.4), int(width * 0.6)), cv2.FONT_HERSHEY_PLAIN,
                 fontScale=(height / 200), color=(200, 50, 0), thickness=3)
 
