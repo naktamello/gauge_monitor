@@ -4,7 +4,7 @@ import math
 import numpy as np
 import os, platform, subprocess, re
 import cv2
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 # user modules
 import defines as DEF
 # import temp_sensor
@@ -63,16 +63,16 @@ def rad_to_degrees(radians):
     return degrees
 
 
-def graph_histogram(in_image):
-    hist = cv2.calcHist([in_image], [0], None, [256], [0, 256])
-    plt.figure()
-    plt.title("hist")
-    plt.xlabel("bins")
-    plt.ylabel("pixels")
-    plt.plot(hist)
-    plt.xlim([0, 256])
-    plt.show()
-    cv2.waitKey(0)
+# def graph_histogram(in_image):
+    # hist = cv2.calcHist([in_image], [0], None, [256], [0, 256])
+    # plt.figure()
+    # plt.title("hist")
+    # plt.xlabel("bins")
+    # plt.ylabel("pixels")
+    # plt.plot(hist)
+    # plt.xlim([0, 256])
+    # plt.show()
+    # cv2.waitKey(0)
 
 
 class Gauge:
