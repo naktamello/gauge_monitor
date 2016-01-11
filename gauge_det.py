@@ -25,7 +25,7 @@ def get_processor_name():
         all_info = subprocess.check_output(command, shell=True).strip()
         for line in all_info.split("\n"):
             if "model name" in line:
-                return re.sub( ".*model name.*:", "", line,1)
+                return re.sub(".*model name.*:", "", line, 1)
     return ""
 
 
@@ -45,6 +45,7 @@ def erode_n_dilate(image):
     image = cv2.dilate(image, dilate_element, 1)
     return image
 
+
 def intersection(L1, L2):
     D = L1[0] * L2[1] - L1[1] * L2[0]
     Dx = L1[2] * L2[1] - L1[1] * L2[2]
@@ -63,13 +64,13 @@ def rad_to_degrees(radians):
 
 
 def graph_histogram(in_image):
-    hist = cv2.calcHist([in_image], [0], None, [256], [0,256])
+    hist = cv2.calcHist([in_image], [0], None, [256], [0, 256])
     plt.figure()
     plt.title("hist")
     plt.xlabel("bins")
     plt.ylabel("pixels")
     plt.plot(hist)
-    plt.xlim([0,256])
+    plt.xlim([0, 256])
     plt.show()
     cv2.waitKey(0)
 
@@ -97,7 +98,7 @@ def main():
         from picamera import PiCamera
         import picamera.array
         camera = PiCamera()
-        camera.resolution = (720,480)
+        camera.resolution = (720, 480)
         running_on_pi = True
     else:
         print "running on Desktop"
@@ -143,35 +144,35 @@ def main():
     # preprocessing image:
     if do_blur:
         prep = cv2.GaussianBlur(prep, (3, 3), 2, 2)
+
     if do_threshold:
         # create structuring element that will be used to "dilate" and "erode" image.
         # the element chosen here is a 3px by 3px rectangle
-        #prep = cv2.equalizeHist(prep)
-        #prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 5)
-        graph_histogram(prep)
+        # prep = cv2.equalizeHist(prep)
+        # prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 5)
         prep = cv2.threshold(prep, 30, 255, cv2.THRESH_BINARY_INV)[1]
         prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 3)
-        #prep = cv2.Canny(prep, 20, 60)
+        # prep = cv2.Canny(prep, 20, 60)
 
     if not draw:
         cv2.imshow(window_name, prep)
         cv2.waitKey(0)
         sys.exit("terminating early")
+
     # Hough transforms (circles, lines, plines)
     if hough_circle:
-        # HoughCircles returns output vector (x,y,radius) inside an one element list so [0] is appended at the end
+        # For some reason HoughCircles returns output vector (x,y,radius)
+        # inside one element list so [0] is appended at the end
         circles = \
-        cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, None, param1=50, param2=30, minRadius=height / 10,
-                         maxRadius=0, )[0]
-        if circles is None:
-            sys.exit("could not locate the gauge circle")  # if no circles are found terminate the program here
-        else:
-            # use only gauge image that is inside the first circle found
-            for c in circles[:1]:
-                # scale factor makes applicable area slightly larger just to be safe we are not missing anything
-                cv2.circle(mask, (c[0], c[1]), int(c[2] * scale_factor), (255, 255, 255), -1)
-                # mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
-                prep = cv2.bitwise_and(prep, mask)
+            cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, None, param1=50, param2=30, minRadius=height / 10,
+                             maxRadius=0, )[0]
+        assert(circles is not None)
+        # use only gauge image that is inside the first circle found
+        for c in circles[:1]:
+            # scale factor makes applicable area slightly larger just to be safe we are not missing anything
+            cv2.circle(mask, (c[0], c[1]), int(c[2] * scale_factor), (255, 255, 255), -1)
+            # mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
+            prep = cv2.bitwise_and(prep, mask)
 
     if do_contours:
         objects = []
@@ -204,11 +205,10 @@ def main():
             thisObject = objects.pop()
             # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
             cv2.drawContours(blank, contours, thisObject.position, DEF.WHITE, 5, 2)
-    cv2.imshow(window_name, blank)
-    cv2.waitKey(0)
+
     if hough_line:
-        blank = cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY)
         lines = cv2.HoughLines(prep, 3, np.pi / 90, 100)
+
     if hough_pline:
         plines = cv2.HoughLinesP(prep, 1, np.pi / 180, 20, None, minLineLength=height / 10, maxLineGap=1)
 
@@ -236,7 +236,7 @@ def main():
                 y0 = np.sin(theta) * rho
                 pt1 = (int(x0 + (height + width) * (-np.sin(theta))), int(y0 + (height + width) * np.cos(theta)))
                 pt2 = (int(x0 - (height + width) * (-np.sin(theta))), int(y0 - (height + width) * np.cos(theta)))
-                gauge_needle.lines.append((pt1,pt2))
+                gauge_needle.lines.append((pt1, pt2))
                 angles_in_radians.append(theta)
                 angles_in_degrees.append(rad_to_degrees(theta))
 
@@ -248,54 +248,59 @@ def main():
                 continue
             angle_diff = abs(cur_angle - angles_in_degrees[j])
             print i, j, angle_diff
-            if (angle_diff>(DEF.NEEDLE_SHAPE-0.5)) and (angle_diff<(DEF.NEEDLE_SHAPE+0.5)):
-                angle_index = (i,j)
+            if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
+                angle_index = (i, j)
                 break
         else:
             pass
         break
 
     assert (len(gauge_needle.lines) >= 2)
-    assert(angle_index is not None)
+    assert (angle_index is not None)
 
-    print "angle1: ",angles_in_degrees[angle_index[0]]
-    print "angle2: ",angles_in_degrees[angle_index[1]]
+    print "angle1: ", angles_in_degrees[angle_index[0]]
+    print "angle2: ", angles_in_degrees[angle_index[1]]
     print "angle difference", angle_diff
-    #assert (angle_difference>(DEF.NEEDLE_SHAPE-0.5)) and (angle_difference<(DEF.NEEDLE_SHAPE+0.5))
 
     avg_theta = (angles_in_radians[angle_index[0]] + angles_in_radians[angle_index[1]]) / 2
-    R = intersection(make_line(gauge_needle.lines[angle_index[0]]), make_line(gauge_needle.lines[angle_index[1]]))
-    if R:
-        print "Intersection detected:", R
-        cv2.circle(canvas, R, 10, DEF.RED, 3)
+    intersecting_pt = intersection(make_line(gauge_needle.lines[angle_index[0]]), make_line(gauge_needle.lines[angle_index[1]]))
+    if intersecting_pt is not None:
+        print "Intersection detected:", intersecting_pt
+        cv2.circle(canvas, intersecting_pt, 10, DEF.RED, 3)
     else:
         print "No single intersection point detected"
+
+    # Although we found a line coincident with the gauge needle,
+    # we need to find which of the two direction it is pointing
+    # guess1 and guess2 are 180 degrees apart
     guess1 = [avg_theta, (0, 0)]
     guess2 = [avg_theta + np.pi, (0, 0)]
-    if guess2[0] > 2 * np.pi:
+    if guess2[0] > 2 * np.pi:   # in case adding pi made it greater than 2pi
         guess2[0] -= 2 * np.pi
     guess1[1] = (int(circle_x + radius * np.sin(guess1[0])), int(circle_y - radius * np.cos(guess1[0])))
-
-    avg_theta += np.pi
     guess2[1] = (int(circle_x + radius * np.sin(guess2[0])), int(circle_y - radius * np.cos(guess2[0])))
-
-    dist1 = math.hypot(R[0] - guess1[1][0], R[1] - guess1[1][1])
-    dist2 = math.hypot(R[0] - guess2[1][0], R[1] - guess2[1][1])
-    if dist1 < dist2:
-        angle = (guess1[0] * 360 / (2 * np.pi))
+    # find the distance between our guess and intersection of gauge needle lines
+    # the guess that is closer to the intersection is the correct one
+    dist1 = math.hypot(intersecting_pt[0] - guess1[1][0], intersecting_pt[1] - guess1[1][1])
+    dist2 = math.hypot(intersecting_pt[0] - guess2[1][0], intersecting_pt[1] - guess2[1][1])
+    if dist1 > dist2:
+        needle_angle = rad_to_degrees(guess1[0])
     else:
-        angle = (guess2[0] * 360 / (2 * np.pi))
-    angle += 180
-    if angle >= 360:
-        angle -= 360
+        needle_angle = rad_to_degrees(guess2[0])
+    if needle_angle >= 360:
+        needle_angle -= 360
 
-    pressure = np.interp(angle,[DEF.GAUGE_MIN['angle'],DEF.GAUGE_MAX['angle']],[DEF.GAUGE_MIN['pressure'],DEF.GAUGE_MAX['pressure']])
+    pressure = np.interp(needle_angle, [DEF.GAUGE_MIN['angle'], DEF.GAUGE_MAX['angle']],
+                         [DEF.GAUGE_MIN['pressure'], DEF.GAUGE_MAX['pressure']])
     print "pressure = ", pressure
     prep = cv2.bitwise_and(prep, mask)
 
-    cv2.line(canvas, gauge_needle.lines[angle_index[0]][0], gauge_needle.lines[angle_index[0]][1], (255, 0, 0), line_thickness)
-    cv2.line(canvas, gauge_needle.lines[angle_index[1]][0], gauge_needle.lines[angle_index[1]][1], (255, 0, 0), line_thickness)
-    cv2.putText(canvas, "pressure:" + str(round(pressure,3)) + " MPa", (int(height * 0.4), int(width * 0.6)), cv2.FONT_HERSHEY_PLAIN,
+    cv2.line(canvas, gauge_needle.lines[angle_index[0]][0], gauge_needle.lines[angle_index[0]][1], (255, 0, 0),
+             line_thickness)
+    cv2.line(canvas, gauge_needle.lines[angle_index[1]][0], gauge_needle.lines[angle_index[1]][1], (255, 0, 0),
+             line_thickness)
+    cv2.putText(canvas, "pressure:" + str(round(pressure, 3)) + " MPa", (int(height * 0.4), int(width * 0.6)),
+                cv2.FONT_HERSHEY_PLAIN,
                 fontScale=(height / 200), color=(200, 50, 0), thickness=3)
 
     if hough_pline:
@@ -319,7 +324,8 @@ def main():
         cv2.imwrite("res.jpg", canvas)
 
     f = open('./gauge_angle.txt', 'w')
-    f.write("angle:" + str(angle) + "\width")
+    f.write("angle: " + str(needle_angle) + "degrees")
+    f.write("pressure: " + str(pressure) + "MPa")
     f.close()
 
 

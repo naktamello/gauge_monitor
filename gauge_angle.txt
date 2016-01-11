@@ -1,1 +1,1 @@
-angle:130.999995677\width
+angle: 130.999995677degreespressure: 1.1666666152MPa
