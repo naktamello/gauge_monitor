@@ -134,6 +134,7 @@ class OS:
         self.processor = self.get_processor_name(self)
         if "ARMv7" in self.processor:
             print "running on Raspberry Pi 2"
+            subprocess.call("~/rpi-fbcp/build/fbcp &", shell=True)
             subprocess.call("gpio mode 4 out", shell=True)
             self.camera = PiCamera()
             self.camera.resolution = (720, 480)
@@ -167,7 +168,8 @@ class OS:
 
     def show_image(self, img):
         if self.running_on_pi:
-            pass
+            if os.path.exists("./canvas.jpg"):
+                subprocess.call("sudo fbi -T 1 canvas.jpg", shell=True)
         else:
             cv2.imshow(window_name, img)
             cv2.waitKey(0)
@@ -237,8 +239,8 @@ def main():
         # HoughCircles returns output vector [(x,y,radius)]
         # one element list so [0] is appended at the end
         circles = \
-            cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, None, param1=50, param2=30, minRadius=height / 10,
-                             maxRadius=0, )[0]
+            cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, None, param1=50, param2=30, minRadius=120,
+                             maxRadius=180, )[0]
         assert(circles is not None)
         # use only gauge image that is inside the first circle found
         for c in circles[:1]:
@@ -266,6 +268,8 @@ def main():
             circle_y = c[1]
             radius = int(c[2])
 
+    print "radius: ", radius
+    print "width: ", width
     angles_in_radians = []
     angles_in_degrees = []
     if lines is None:
@@ -356,9 +360,11 @@ def main():
                 # red for line segments
                 cv2.line(canvas, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), DEF.THICKNESS)
 
-    host.show_image(canvas)
     host.write_to_file("Pressure: " + display_value + " MPa", "Temperature: " + str(host.read_temp()))
     # pass in tuples ("filename.ext", img_to_write)
     host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas))
+    host.show_image(canvas)
+
+    return True
 if __name__ == "__main__":
     main()
