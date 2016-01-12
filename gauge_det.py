@@ -2,9 +2,9 @@
 import sys
 import math
 import numpy as np
+import time
 import os, platform, subprocess, re
 import cv2
-#from matplotlib import pyplot as plt
 # user modules
 import defines as DEF
 # import temp_sensor
@@ -63,17 +63,19 @@ def rad_to_degrees(radians):
     return degrees
 
 
-# def graph_histogram(in_image):
-    # hist = cv2.calcHist([in_image], [0], None, [256], [0, 256])
-    # plt.figure()
-    # plt.title("hist")
-    # plt.xlabel("bins")
-    # plt.ylabel("pixels")
-    # plt.plot(hist)
-    # plt.xlim([0, 256])
-    # plt.show()
-    # cv2.waitKey(0)
+def get_angles(angle_vals):
+    for i in range(len(angle_vals)):
+        cur_angle = angle_vals[i]
+        for j in range(len(angle_vals)):
+            if j == i:
+                continue
+            angle_diff = abs(cur_angle - angle_vals[j])
+            print i, j, angle_diff
+            if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
+                return (i, j)
 
+def preprocess_img(img):
+    
 
 class Gauge:
     x = 0  # these will hold the coordinates of the object "centers". see moments of inertia
@@ -94,7 +96,7 @@ def main():
     if "ARMv7" in processor:
         print "running on Raspberry Pi 2"
         import temp_sensor
-        subprocess.call("gpio mode 1 pwm", shell=True)
+        subprocess.call("gpio mode 4 out", shell=True)
         from picamera import PiCamera
         import picamera.array
         camera = PiCamera()
@@ -111,19 +113,20 @@ def main():
     hough_pline = False
     do_blur = True
     do_threshold = True
-    do_contours = True
+    do_contours = False
     window_name = 'gauge'
     line_thickness = 2
     gauge_needle = Gauge()
 
     # setup image
     if running_on_pi:
-        subprocess.call("gpio pwm 1 20", shell=True)
-        camera.start_preview()
+        subprocess.call("gpio write 4 1", shell=True)
+        time.sleep(0.1)
+        #camera.start_preview()
         with picamera.array.PiRGBArray(camera) as stream:
             camera.capture(stream, format='bgr')
             gauge_image = stream.array
-        subprocess.call("gpio pwm 1 0", shell=True)
+        subprocess.call("gpio write 4 0", shell=True)
         im = gauge_image
     else:
         gauge_image = "./test.jpg"
@@ -148,11 +151,13 @@ def main():
     if do_threshold:
         # create structuring element that will be used to "dilate" and "erode" image.
         # the element chosen here is a 3px by 3px rectangle
-        # prep = cv2.equalizeHist(prep)
+        prep = cv2.equalizeHist(prep)
         # prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 5)
-        prep = cv2.threshold(prep, 30, 255, cv2.THRESH_BINARY_INV)[1]
-        prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 3)
+        prep = cv2.threshold(prep, 70, 255, cv2.THRESH_BINARY_INV)[1]
+        #prep = erode_n_dilate(prep)
+        #prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 3)
         # prep = cv2.Canny(prep, 20, 60)
+        #prep = erode_n_dilate(prep)
 
     if not draw:
         cv2.imshow(window_name, prep)
@@ -173,6 +178,7 @@ def main():
             cv2.circle(mask, (c[0], c[1]), int(c[2] * scale_factor), (255, 255, 255), -1)
             # mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
             prep = cv2.bitwise_and(prep, mask)
+
 
     if do_contours:
         objects = []
@@ -239,28 +245,15 @@ def main():
                 gauge_needle.lines.append((pt1, pt2))
                 angles_in_radians.append(theta)
                 angles_in_degrees.append(rad_to_degrees(theta))
+                cv2.line(prep,pt1,pt2, (255, 0, 0), line_thickness)
 
     number_of_angles = len(angles_in_degrees)
-    for i in range(number_of_angles):
-        cur_angle = angles_in_degrees[i]
-        for j in range(number_of_angles):
-            if j == i:
-                continue
-            angle_diff = abs(cur_angle - angles_in_degrees[j])
-            print i, j, angle_diff
-            if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
-                angle_index = (i, j)
-                break
-        else:
-            pass
-        break
+    angle_index = get_angles(angles_in_degrees)
 
     assert (len(gauge_needle.lines) >= 2)
-    assert (angle_index is not None)
 
     print "angle1: ", angles_in_degrees[angle_index[0]]
     print "angle2: ", angles_in_degrees[angle_index[1]]
-    print "angle difference", angle_diff
 
     avg_theta = (angles_in_radians[angle_index[0]] + angles_in_radians[angle_index[1]]) / 2
     intersecting_pt = intersection(make_line(gauge_needle.lines[angle_index[0]]), make_line(gauge_needle.lines[angle_index[1]]))
@@ -277,19 +270,28 @@ def main():
     guess2 = [avg_theta + np.pi, (0, 0)]
     if guess2[0] > 2 * np.pi:   # in case adding pi made it greater than 2pi
         guess2[0] -= 2 * np.pi
+    print "guess1: ", guess1[0]
+    print "guess2: ", guess2[0]
     guess1[1] = (int(circle_x + radius * np.sin(guess1[0])), int(circle_y - radius * np.cos(guess1[0])))
     guess2[1] = (int(circle_x + radius * np.sin(guess2[0])), int(circle_y - radius * np.cos(guess2[0])))
+    cv2.circle(canvas, guess1[1], 10, DEF.GREEN, 3)
+    cv2.circle(canvas, guess2[1], 10, DEF.BLUE, 3)
     # find the distance between our guess and intersection of gauge needle lines
     # the guess that is closer to the intersection is the correct one
     dist1 = math.hypot(intersecting_pt[0] - guess1[1][0], intersecting_pt[1] - guess1[1][1])
     dist2 = math.hypot(intersecting_pt[0] - guess2[1][0], intersecting_pt[1] - guess2[1][1])
-    if dist1 > dist2:
-        needle_angle = rad_to_degrees(guess1[0])
+    print "dist1: ", dist1
+    print "dist2: ", dist2
+    if dist1 < dist2:
+        needle_angle = rad_to_degrees(guess1[0]-np.pi)
     else:
-        needle_angle = rad_to_degrees(guess2[0])
-    if needle_angle >= 360:
-        needle_angle -= 360
+        needle_angle = rad_to_degrees(guess2[0]-np.pi)
+    if needle_angle >= 360.0:
+        needle_angle -= 360.0
+    elif needle_angle <= 0.0:
+        needle_angle += 360.0
 
+    print "needle_angle: ", needle_angle
     pressure = np.interp(needle_angle, [DEF.GAUGE_MIN['angle'], DEF.GAUGE_MAX['angle']],
                          [DEF.GAUGE_MIN['pressure'], DEF.GAUGE_MAX['pressure']])
     print "pressure = ", pressure
@@ -299,10 +301,19 @@ def main():
              line_thickness)
     cv2.line(canvas, gauge_needle.lines[angle_index[1]][0], gauge_needle.lines[angle_index[1]][1], (255, 0, 0),
              line_thickness)
-    cv2.putText(canvas, "pressure:" + str(round(pressure, 3)) + " MPa", (int(height * 0.4), int(width * 0.6)),
+    display_value = str(round(pressure, 2))
+    display_unit = "MPa"
+    font_size = (height / 80)
+    hor_offset = font_size * 12 * sum(c.isdigit() for c in display_value)
+    ver_offset = 0
+    value_position = (int(width*0.5), int(height*0.2))
+    unit_position = (value_position[0]+hor_offset, value_position[1])
+    cv2.putText(canvas, display_value, value_position,
                 cv2.FONT_HERSHEY_PLAIN,
-                fontScale=(height / 200), color=(200, 50, 0), thickness=3)
-
+                fontScale=font_size, color=DEF.RED, thickness=10)
+    cv2.putText(canvas, display_unit, unit_position,
+                cv2.FONT_HERSHEY_PLAIN,
+                fontScale=font_size/2, color=DEF.RED, thickness=4)
     if hough_pline:
         for pline in plines[:10]:
             for l in pline:
@@ -310,7 +321,7 @@ def main():
                 cv2.line(canvas, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), line_thickness)
 
     if draw:
-        canvas = np.concatenate((im, canvas), axis=1)
+        #canvas = np.concatenate((im, canvas), axis=1)
         image_to_show = canvas
     else:
         image_to_show = prep
@@ -322,7 +333,7 @@ def main():
     # save the resulting image
     if draw:
         cv2.imwrite("res.jpg", canvas)
-
+        cv2.imwrite("prep.jpg", prep)
     f = open('./gauge_angle.txt', 'w')
     f.write("angle: " + str(needle_angle) + "degrees")
     f.write("pressure: " + str(pressure) + "MPa")
