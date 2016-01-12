@@ -1,1 +1,2 @@
-angle: 132.999998009degreespressure: 1.14074071493MPa
+Pressure: 1.11 MPa
+Temperature: OFF

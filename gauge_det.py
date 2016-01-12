@@ -7,26 +7,16 @@ import os, platform, subprocess, re
 import cv2
 # user modules
 import defines as DEF
-# import temp_sensor
-
-import os, platform, subprocess, re
-
-
-def get_processor_name():
-    if platform.system() == "Windows":
-        return platform.processor()
-    elif platform.system() == "Darwin":
-        import os
-        os.environ['PATH'] = os.environ['PATH'] + os.pathsep + '/usr/sbin'
-        command = "sysctl -n machdep.cpu.brand_string"
-        return subprocess.check_output(command).strip()
-    elif platform.system() == "Linux":
-        command = "cat /proc/cpuinfo"
-        all_info = subprocess.check_output(command, shell=True).strip()
-        for line in all_info.split("\n"):
-            if "model name" in line:
-                return re.sub(".*model name.*:", "", line, 1)
-    return ""
+import temp_sensor
+# rasbperry modules
+try:
+    from picamera import PiCamera
+except ImportError:
+    "picamera not found"
+try:
+    import picamera.array
+except ImportError:
+    "picamera.array not found"
 
 
 def make_line(point_tuple):
@@ -74,76 +64,7 @@ def get_angles(angle_vals):
             if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
                 return (i, j)
 
-def preprocess_img(img):
-    
-
-class Gauge:
-    x = 0  # these will hold the coordinates of the object "centers". see moments of inertia
-    y = 0
-
-    def __init__(self, name="null"):
-        self.type = "Object"
-        self.color = DEF.RED
-        self.position = 0
-        self.area = 0
-        self.lines = []
-
-
-def main():
-    # checks to see if we are running on raspberry pi2
-    processor = get_processor_name()
-    print processor
-    if "ARMv7" in processor:
-        print "running on Raspberry Pi 2"
-        import temp_sensor
-        subprocess.call("gpio mode 4 out", shell=True)
-        from picamera import PiCamera
-        import picamera.array
-        camera = PiCamera()
-        camera.resolution = (720, 480)
-        running_on_pi = True
-    else:
-        print "running on Desktop"
-        running_on_pi = False
-
-    # parameters
-    draw = True
-    hough_circle = True
-    hough_line = True
-    hough_pline = False
-    do_blur = True
-    do_threshold = True
-    do_contours = False
-    window_name = 'gauge'
-    line_thickness = 2
-    gauge_needle = Gauge()
-
-    # setup image
-    if running_on_pi:
-        subprocess.call("gpio write 4 1", shell=True)
-        time.sleep(0.1)
-        #camera.start_preview()
-        with picamera.array.PiRGBArray(camera) as stream:
-            camera.capture(stream, format='bgr')
-            gauge_image = stream.array
-        subprocess.call("gpio write 4 0", shell=True)
-        im = gauge_image
-    else:
-        gauge_image = "./test.jpg"
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-        im = cv2.imread(gauge_image)
-
-    gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
-    prep = gray_im  # copy of grayscale image to be preprocessed for angle detection
-    mask = np.zeros_like(prep)
-    canvas = np.zeros_like(im)  # output image
-    np.copyto(canvas, im)
-    blank = np.zeros_like(im)
-    height, width = gray_im.shape
-    assert height == 480
-    assert width == 720
-    scale_factor = 1.15
-
+def preprocess_img(prep,do_blur=0, do_threshold=1):
     # preprocessing image:
     if do_blur:
         prep = cv2.GaussianBlur(prep, (3, 3), 2, 2)
@@ -159,6 +80,153 @@ def main():
         # prep = cv2.Canny(prep, 20, 60)
         #prep = erode_n_dilate(prep)
 
+    return prep
+
+
+def find_contour(this_object, img, draw=False):
+    objects = []
+    copy = np.zeros_like(img)  # output image
+    np.copyto(copy, img)
+
+    _, contours, hierarchy = cv2.findContours(copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours is not None and len(contours) > 0:
+        num_objects = len(contours)
+        # print("objects = %d" % numObjects )
+        if num_objects < 1024:
+            for i in range(0, len(contours)):
+                moment = cv2.moments(contours[i])
+                area = moment['m00']
+                if area > DEF.AREA:
+                    # print("area = %d" % area)
+                    object = this_object
+                    object.area = area
+                    object.x = int(moment['m10'] / area)
+                    object.y = int(moment['m01'] / area)
+                    object.position = i
+                    objects.append(object)
+                    # print len(objects)
+                    # print "area is greater than .."
+                    objectFound = True
+                    # else: objectFound = False
+    if draw:
+        assert (len(objects) <= len(contours)), \
+        "objects: %d, contours: %d" % (len(objects), len(contours))
+        while len(objects > 0):
+            this_contour = objects.pop()
+            # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
+            cv2.drawContours(img, contours, this_contour.position, DEF.WHITE, 5, 2)
+    return img
+
+class Gauge:
+    x = 0  # these will hold the coordinates of the object "centers". see moments of inertia
+    y = 0
+
+    def __init__(self, name="null"):
+        self.type = "Object"
+        self.color = DEF.RED
+        self.position = (0,0)
+        self.area = 0
+        self.lines = []
+
+
+class OS:
+    def __init__(self):
+        self.processor = self.get_processor_name(self)
+        if "ARMv7" in self.processor:
+            print "running on Raspberry Pi 2"
+            subprocess.call("gpio mode 4 out", shell=True)
+            self.camera = PiCamera()
+            self.camera.resolution = (720, 480)
+            temp_sensor.initialize()
+            self.temperature = temp_sensor.read_temp()
+            self.running_on_pi = True
+        else:
+            print "running on Desktop"
+            self.temperature = None
+            self.running_on_pi = False
+
+    def read_temp(self):
+        self.temperature = temp_sensor.read_temp()
+        return self.temperature
+
+    def get_image(self):
+        if self.running_on_pi:
+            subprocess.call("gpio write 4 1", shell=True)
+            time.sleep(0.1)
+            #camera.start_preview()
+            with picamera.array.PiRGBArray(self.camera) as stream:
+                self.camera.capture(stream, format='bgr')
+                gauge_image = stream.array
+            subprocess.call("gpio write 4 0", shell=True)
+            return gauge_image
+        else:
+            image_path = "./test.jpg"
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            im = cv2.imread(image_path)
+            return im
+
+    def show_image(self, img):
+        if self.running_on_pi:
+            pass
+        else:
+            cv2.imshow(window_name, img)
+            cv2.waitKey(0)
+
+    def write_image(self, *img_tuple):
+        imgs = list(img_tuple)
+        for img in imgs:
+            cv2.imwrite(img[0], img[1])
+
+    def write_to_file(self, *input_text):
+        lines = list(input_text)
+        f = open('./gauge_angle.txt', 'w')
+        for line in lines:
+            f.write(line+"\n")
+        f.close()
+
+    @staticmethod
+    def get_processor_name(self):
+        if platform.system() == "Windows":
+            return platform.processor()
+        elif platform.system() == "Darwin":
+            import os
+            os.environ['PATH'] = os.environ['PATH'] + os.pathsep + '/usr/sbin'
+            command = "sysctl -n machdep.cpu.brand_string"
+            return subprocess.check_output(command).strip()
+        elif platform.system() == "Linux":
+            command = "cat /proc/cpuinfo"
+            all_info = subprocess.check_output(command, shell=True).strip()
+            for line in all_info.split("\n"):
+                if "model name" in line:
+                    return re.sub(".*model name.*:", "", line, 1)
+        return ""
+
+window_name = 'gauge'
+def main():
+    # parameters
+    draw = True
+    hough_circle = True
+    hough_line = True
+    hough_pline = False
+    gauge = Gauge()
+
+    host = OS()
+    # setup image
+    im = host.get_image()
+    gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
+    prep = gray_im  # copy of grayscale image to be preprocessed for angle detection
+    mask = np.zeros_like(prep)
+    canvas = np.zeros_like(im)  # output image
+    np.copyto(canvas, im)
+    blank = np.zeros_like(im)
+    height, width = gray_im.shape
+    assert height == 480
+    assert width == 720
+    scale_factor = 1.15
+
+    # prepare image for circle and line detection
+    prep = preprocess_img(prep)
+
     if not draw:
         cv2.imshow(window_name, prep)
         cv2.waitKey(0)
@@ -166,8 +234,8 @@ def main():
 
     # Hough transforms (circles, lines, plines)
     if hough_circle:
-        # For some reason HoughCircles returns output vector (x,y,radius)
-        # inside one element list so [0] is appended at the end
+        # HoughCircles returns output vector [(x,y,radius)]
+        # one element list so [0] is appended at the end
         circles = \
             cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, None, param1=50, param2=30, minRadius=height / 10,
                              maxRadius=0, )[0]
@@ -180,38 +248,6 @@ def main():
             prep = cv2.bitwise_and(prep, mask)
 
 
-    if do_contours:
-        objects = []
-        copy = np.zeros_like(prep)  # output image
-        np.copyto(copy, prep)
-        _, contours, hierarchy = cv2.findContours(copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if contours is not None and len(contours) > 0:
-            numObjects = len(contours)
-            # print("objects = %d" % numObjects )
-            if numObjects < 1024:
-                for i in range(0, len(contours)):
-                    moment = cv2.moments(contours[i])
-                    area = moment['m00']
-                    if area > DEF.AREA:
-                        # print("area = %d" % area)
-                        object = gauge_needle
-                        object.area = area
-                        object.x = int(moment['m10'] / area)
-                        object.y = int(moment['m01'] / area)
-                        object.position = i
-                        objects.append(object)
-                        # print len(objects)
-                        # print "area is greater than .."
-                        objectFound = True
-                        # else: objectFound = False
-
-        assert (len(objects) <= len(contours)), \
-            "objects: %d, contours: %d" % (len(objects), len(contours))
-        while (len(objects) > 0):
-            thisObject = objects.pop()
-            # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
-            cv2.drawContours(blank, contours, thisObject.position, DEF.WHITE, 5, 2)
-
     if hough_line:
         lines = cv2.HoughLines(prep, 3, np.pi / 90, 100)
 
@@ -221,7 +257,7 @@ def main():
     first = True
     for c in circles[:1]:
         # green for circles (only draw the 1 strongest)
-        cv2.circle(canvas, (c[0], c[1]), c[2], (0, 255, 0), line_thickness)
+        cv2.circle(canvas, (c[0], c[1]), c[2], (0, 255, 0), DEF.THICKNESS)
         # cv2.circle()
         # res = cv2.bitwise_and(frame,frame, mask= mask)
         if first:
@@ -242,21 +278,21 @@ def main():
                 y0 = np.sin(theta) * rho
                 pt1 = (int(x0 + (height + width) * (-np.sin(theta))), int(y0 + (height + width) * np.cos(theta)))
                 pt2 = (int(x0 - (height + width) * (-np.sin(theta))), int(y0 - (height + width) * np.cos(theta)))
-                gauge_needle.lines.append((pt1, pt2))
+                gauge.lines.append((pt1, pt2))
                 angles_in_radians.append(theta)
                 angles_in_degrees.append(rad_to_degrees(theta))
-                cv2.line(prep,pt1,pt2, (255, 0, 0), line_thickness)
+                cv2.line(prep,pt1,pt2, (255, 0, 0), DEF.THICKNESS)
 
     number_of_angles = len(angles_in_degrees)
     angle_index = get_angles(angles_in_degrees)
 
-    assert (len(gauge_needle.lines) >= 2)
+    assert (len(gauge.lines) >= 2)
 
     print "angle1: ", angles_in_degrees[angle_index[0]]
     print "angle2: ", angles_in_degrees[angle_index[1]]
 
     avg_theta = (angles_in_radians[angle_index[0]] + angles_in_radians[angle_index[1]]) / 2
-    intersecting_pt = intersection(make_line(gauge_needle.lines[angle_index[0]]), make_line(gauge_needle.lines[angle_index[1]]))
+    intersecting_pt = intersection(make_line(gauge.lines[angle_index[0]]), make_line(gauge.lines[angle_index[1]]))
     if intersecting_pt is not None:
         print "Intersection detected:", intersecting_pt
         cv2.circle(canvas, intersecting_pt, 10, DEF.RED, 3)
@@ -297,10 +333,10 @@ def main():
     print "pressure = ", pressure
     prep = cv2.bitwise_and(prep, mask)
 
-    cv2.line(canvas, gauge_needle.lines[angle_index[0]][0], gauge_needle.lines[angle_index[0]][1], (255, 0, 0),
-             line_thickness)
-    cv2.line(canvas, gauge_needle.lines[angle_index[1]][0], gauge_needle.lines[angle_index[1]][1], (255, 0, 0),
-             line_thickness)
+    cv2.line(canvas, gauge.lines[angle_index[0]][0], gauge.lines[angle_index[0]][1], (255, 0, 0),
+             DEF.THICKNESS)
+    cv2.line(canvas, gauge.lines[angle_index[1]][0], gauge.lines[angle_index[1]][1], (255, 0, 0),
+             DEF.THICKNESS)
     display_value = str(round(pressure, 2))
     display_unit = "MPa"
     font_size = (height / 80)
@@ -318,27 +354,11 @@ def main():
         for pline in plines[:10]:
             for l in pline:
                 # red for line segments
-                cv2.line(canvas, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), line_thickness)
+                cv2.line(canvas, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), DEF.THICKNESS)
 
-    if draw:
-        #canvas = np.concatenate((im, canvas), axis=1)
-        image_to_show = canvas
-    else:
-        image_to_show = prep
-
-    if not running_on_pi:
-        cv2.imshow(window_name, image_to_show)
-        cv2.waitKey(0)
-
-    # save the resulting image
-    if draw:
-        cv2.imwrite("res.jpg", canvas)
-        cv2.imwrite("prep.jpg", prep)
-    f = open('./gauge_angle.txt', 'w')
-    f.write("angle: " + str(needle_angle) + "degrees")
-    f.write("pressure: " + str(pressure) + "MPa")
-    f.close()
-
-
+    host.show_image(canvas)
+    host.write_to_file("Pressure: " + display_value + " MPa", "Temperature: " + str(host.read_temp()))
+    # pass in tuples ("filename.ext", img_to_write)
+    host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas))
 if __name__ == "__main__":
     main()

@@ -11,3 +11,4 @@ AREA = 1000
 GAUGE_MIN = {'pressure':0.0, 'angle':45.0}
 GAUGE_MAX = {'pressure':3.5, 'angle':315.0}
 NEEDLE_SHAPE = 6.0
+THICKNESS = 4
