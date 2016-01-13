@@ -3,7 +3,8 @@ control_c()
 # run if user hits control-c
 {
   echo -en "\n*** Ouch! Exiting ***\n"
-  exit $?
+  kill -s SIGTERM $!
+  exit 0
 }
  
 ps cax | grep fbcp > /dev/null
