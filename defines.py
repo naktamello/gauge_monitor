@@ -12,3 +12,5 @@ GAUGE_MIN = {'pressure':0.0, 'angle':45.0}
 GAUGE_MAX = {'pressure':3.5, 'angle':315.0}
 NEEDLE_SHAPE = 6.0
 THICKNESS = 4
+WIDTH = 720
+MAX_DISTANCE = 100

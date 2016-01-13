@@ -19,6 +19,14 @@ except ImportError:
     "picamera.array not found"
 
 
+def error_output(img,err_msg="ERROR", height=480, width=720):
+    font_size = (height / 100)
+    value_position = (int(width*0.1), int(height*0.5))
+    cv2.putText(img, err_msg, value_position,
+                cv2.FONT_HERSHEY_PLAIN,
+                fontScale=font_size, color=DEF.RED, thickness=10)
+    cv2.imwrite("canvas.jpg", img)
+
 def make_line(point_tuple):
     p1 = point_tuple[0]
     p2 = point_tuple[1]
@@ -54,6 +62,7 @@ def rad_to_degrees(radians):
 
 
 def get_angles(angle_vals):
+    possible_angles = []
     for i in range(len(angle_vals)):
         cur_angle = angle_vals[i]
         for j in range(len(angle_vals)):
@@ -62,7 +71,8 @@ def get_angles(angle_vals):
             angle_diff = abs(cur_angle - angle_vals[j])
             print i, j, angle_diff
             if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
-                return (i, j)
+                possible_angles.append((i, j))
+    return possible_angles
 
 def preprocess_img(prep,do_blur=0, do_threshold=1):
     # preprocessing image:
@@ -74,7 +84,7 @@ def preprocess_img(prep,do_blur=0, do_threshold=1):
         # the element chosen here is a 3px by 3px rectangle
         prep = cv2.equalizeHist(prep)
         # prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 5)
-        prep = cv2.threshold(prep, 70, 255, cv2.THRESH_BINARY_INV)[1]
+        prep = cv2.threshold(prep, 65, 255, cv2.THRESH_BINARY_INV)[1]
         #prep = erode_n_dilate(prep)
         #prep = cv2.adaptiveThreshold(prep, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 3)
         # prep = cv2.Canny(prep, 20, 60)
@@ -120,6 +130,8 @@ def find_contour(this_object, img, draw=False):
 class Gauge:
     x = 0  # these will hold the coordinates of the object "centers". see moments of inertia
     y = 0
+    angles_in_radians = []
+    angles_in_degrees = []
 
     def __init__(self, name="null"):
         self.type = "Object"
@@ -205,6 +217,7 @@ class OS:
         return ""
 
 window_name = 'gauge'
+
 def main():
     # parameters
     draw = True
@@ -222,6 +235,7 @@ def main():
     canvas = np.zeros_like(im)  # output image
     np.copyto(canvas, im)
     blank = np.zeros_like(im)
+    error_screen = np.zeros_like(im)
     height, width = gray_im.shape
     assert height == 480
     assert width == 720
@@ -236,15 +250,7 @@ def main():
         cv2.waitKey(0)
         sys.exit("terminating early")
 
-    err_msg = "ERROR"
-    font_size = (height / 80)
-    hor_offset = font_size * 12 * sum(c.isdigit() for c in err_msg)
-    ver_offset = 0
-    value_position = (int(width*0.3), int(height*0.5))
-    cv2.putText(blank, err_msg, value_position,
-                cv2.FONT_HERSHEY_PLAIN,
-                fontScale=font_size, color=DEF.RED, thickness=10)
-    cv2.imwrite("canvas.jpg", blank)
+    #error_output(blank)
 
     # Hough transforms (circles, lines, plines)
     if hough_circle:
@@ -253,7 +259,9 @@ def main():
         circles = \
             cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, None, param1=50, param2=30, minRadius=120,
                              maxRadius=180, )[0]
-        assert(circles is not None)
+        if circles is None:
+            error_output(error_screen, err_msg="no circles found")
+            sys.exit("no circles found")
         # use only gauge image that is inside the first circle found
         for c in circles[:1]:
             # scale factor makes applicable area slightly larger just to be safe we are not missing anything
@@ -281,12 +289,12 @@ def main():
 
     print "radius: ", radius
     print "width: ", width
-    angles_in_radians = []
-    angles_in_degrees = []
+
     if lines is None:
+        error_output(error_screen, err_msg="no lines found")
         sys.exit("there are no lines inside the cicle")  # if no lines are found terminate the program here
     else:
-        for line in lines[:5]:
+        for line in lines[:6]:
             for (rho, theta) in line:
                 # blue for infinite lines (only draw the 2 strongest)
                 x0 = np.cos(theta) * rho
@@ -294,64 +302,81 @@ def main():
                 pt1 = (int(x0 + (height + width) * (-np.sin(theta))), int(y0 + (height + width) * np.cos(theta)))
                 pt2 = (int(x0 - (height + width) * (-np.sin(theta))), int(y0 - (height + width) * np.cos(theta)))
                 gauge.lines.append((pt1, pt2))
-                angles_in_radians.append(theta)
-                angles_in_degrees.append(rad_to_degrees(theta))
+                gauge.angles_in_radians.append(theta)
+                gauge.angles_in_degrees.append(rad_to_degrees(theta))
                 cv2.line(prep,pt1,pt2, (255, 0, 0), DEF.THICKNESS)
+    number_of_angles = len(gauge.angles_in_degrees)
+    angle_index = get_angles(gauge.angles_in_degrees)
+    angle_set = set(tuple(sorted(l)) for l in angle_index)
+    print "lengh: ", len(angle_index)
+    print
+    if len(gauge.lines) < 2:
+        error_output(error_screen, err_msg="unable to find needle form lines")
+        sys.exit("unable to find needle form lines")
 
-    number_of_angles = len(angles_in_degrees)
-    angle_index = get_angles(angles_in_degrees)
+    line_found = False
+    for this_pair in angle_index:
+        print "angle1: ", gauge.angles_in_degrees[this_pair[0]]
+        print "angle2: ", gauge.angles_in_degrees[this_pair[1]]
 
-    assert (len(gauge.lines) >= 2)
+        line1 = make_line(gauge.lines[this_pair[0]])
+        line2 = make_line(gauge.lines[this_pair[1]])
+        intersecting_pt = intersection(line1, line2)
+        if intersecting_pt is not None:
+            print "Intersection detected:", intersecting_pt
+            cv2.circle(canvas, intersecting_pt, 10, DEF.RED, 3)
+        else:
+            print "No single intersection point detected"
 
-    print "angle1: ", angles_in_degrees[angle_index[0]]
-    print "angle2: ", angles_in_degrees[angle_index[1]]
+        # Although we found a line coincident with the gauge needle,
+        # we need to find which of the two direction it is pointing
+        # guess1 and guess2 are 180 degrees apart
+        avg_theta = (gauge.angles_in_radians[this_pair[0]] + gauge.angles_in_radians[this_pair[1]]) / 2
+        guess1 = [avg_theta, (0, 0)]
+        guess2 = [avg_theta + np.pi, (0, 0)]
+        if guess2[0] > 2 * np.pi:   # in case adding pi made it greater than 2pi
+            guess2[0] -= 2 * np.pi
+        print "guess1: ", guess1[0]
+        print "guess2: ", guess2[0]
+        guess1[1] = (int(circle_x + radius * np.sin(guess1[0])), int(circle_y - radius * np.cos(guess1[0])))
+        guess2[1] = (int(circle_x + radius * np.sin(guess2[0])), int(circle_y - radius * np.cos(guess2[0])))
+        # find the distance between our guess and intersection of gauge needle lines
+        # the guess that is closer to the intersection is the correct one
+        dist1 = math.hypot(intersecting_pt[0] - guess1[1][0], intersecting_pt[1] - guess1[1][1])
+        dist2 = math.hypot(intersecting_pt[0] - guess2[1][0], intersecting_pt[1] - guess2[1][1])
+        print "dist1: ", dist1
+        print "dist2: ", dist2
+        if dist1 < DEF.MAX_DISTANCE or dist2 < DEF.MAX_DISTANCE:
+            line_found = True
+            if dist1 < dist2:
+                correct_guess = guess1
+            else:
+                correct_guess = guess2
 
-    avg_theta = (angles_in_radians[angle_index[0]] + angles_in_radians[angle_index[1]]) / 2
-    intersecting_pt = intersection(make_line(gauge.lines[angle_index[0]]), make_line(gauge.lines[angle_index[1]]))
-    if intersecting_pt is not None:
-        print "Intersection detected:", intersecting_pt
-        cv2.circle(canvas, intersecting_pt, 10, DEF.RED, 3)
+        if line_found is True:
+            cv2.circle(canvas, guess1[1], 10, DEF.GREEN, 3)
+            cv2.circle(canvas, guess2[1], 10, DEF.BLUE, 3)
+            cv2.line(canvas, gauge.lines[this_pair[0]][0], gauge.lines[this_pair[0]][1], (255, 0, 0),
+            DEF.THICKNESS)
+            cv2.line(canvas, gauge.lines[this_pair[1]][0], gauge.lines[this_pair[1]][1], (255, 0, 0),
+            DEF.THICKNESS)
+            break
+
+    if line_found is False:
+        error_output(error_screen, err_msg="no positive pair")
+        needle_angle = 0.0
     else:
-        print "No single intersection point detected"
-
-    # Although we found a line coincident with the gauge needle,
-    # we need to find which of the two direction it is pointing
-    # guess1 and guess2 are 180 degrees apart
-    guess1 = [avg_theta, (0, 0)]
-    guess2 = [avg_theta + np.pi, (0, 0)]
-    if guess2[0] > 2 * np.pi:   # in case adding pi made it greater than 2pi
-        guess2[0] -= 2 * np.pi
-    print "guess1: ", guess1[0]
-    print "guess2: ", guess2[0]
-    guess1[1] = (int(circle_x + radius * np.sin(guess1[0])), int(circle_y - radius * np.cos(guess1[0])))
-    guess2[1] = (int(circle_x + radius * np.sin(guess2[0])), int(circle_y - radius * np.cos(guess2[0])))
-    cv2.circle(canvas, guess1[1], 10, DEF.GREEN, 3)
-    cv2.circle(canvas, guess2[1], 10, DEF.BLUE, 3)
-    # find the distance between our guess and intersection of gauge needle lines
-    # the guess that is closer to the intersection is the correct one
-    dist1 = math.hypot(intersecting_pt[0] - guess1[1][0], intersecting_pt[1] - guess1[1][1])
-    dist2 = math.hypot(intersecting_pt[0] - guess2[1][0], intersecting_pt[1] - guess2[1][1])
-    print "dist1: ", dist1
-    print "dist2: ", dist2
-    if dist1 < dist2:
-        needle_angle = rad_to_degrees(guess1[0]-np.pi)
-    else:
-        needle_angle = rad_to_degrees(guess2[0]-np.pi)
-    if needle_angle >= 360.0:
-        needle_angle -= 360.0
-    elif needle_angle <= 0.0:
-        needle_angle += 360.0
-
+        ref_offset = np.pi
+        needle_angle = rad_to_degrees(correct_guess[0]-ref_offset)
+    print "correct angle(cv2)= ", needle_angle
+    if needle_angle < 0.0:
+        needle_angle += 360
     print "needle_angle: ", needle_angle
     pressure = np.interp(needle_angle, [DEF.GAUGE_MIN['angle'], DEF.GAUGE_MAX['angle']],
                          [DEF.GAUGE_MIN['pressure'], DEF.GAUGE_MAX['pressure']])
     print "pressure = ", pressure
     prep = cv2.bitwise_and(prep, mask)
 
-    cv2.line(canvas, gauge.lines[angle_index[0]][0], gauge.lines[angle_index[0]][1], (255, 0, 0),
-             DEF.THICKNESS)
-    cv2.line(canvas, gauge.lines[angle_index[1]][0], gauge.lines[angle_index[1]][1], (255, 0, 0),
-             DEF.THICKNESS)
     display_value = str(round(pressure, 2))
     display_unit = "MPa"
     font_size = (height / 80)
@@ -375,6 +400,7 @@ def main():
     # pass in tuples ("filename.ext", img_to_write)
     host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas))
     host.show_image(canvas)
+    #time.sleep(3)
 
     return True
 if __name__ == "__main__":
