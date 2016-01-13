@@ -294,7 +294,7 @@ def main():
         error_output(error_screen, err_msg="no lines found")
         sys.exit("there are no lines inside the cicle")  # if no lines are found terminate the program here
     else:
-        for line in lines[:6]:
+        for line in lines[:3]:
             for (rho, theta) in line:
                 # blue for infinite lines (only draw the 2 strongest)
                 x0 = np.cos(theta) * rho
