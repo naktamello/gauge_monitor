@@ -134,7 +134,7 @@ class OS:
         self.processor = self.get_processor_name(self)
         if "ARMv7" in self.processor:
             print "running on Raspberry Pi 2"
-            subprocess.call("~/rpi-fbcp/build/fbcp &", shell=True)
+            #subprocess.call("~/rpi-fbcp/build/fbcp &", shell=True)
             subprocess.call("gpio mode 4 out", shell=True)
             self.camera = PiCamera()
             self.camera.resolution = (720, 480)
@@ -168,8 +168,9 @@ class OS:
 
     def show_image(self, img):
         if self.running_on_pi:
-            if os.path.exists("./canvas.jpg"):
-                subprocess.call("sudo fbi -T 1 canvas.jpg", shell=True)
+            #if os.path.exists("./canvas.jpg"):
+                #subprocess.call("sudo fbi -T 1 canvas.jpg", shell=True)
+            pass
         else:
             cv2.imshow(window_name, img)
             cv2.waitKey(0)
@@ -229,10 +230,21 @@ def main():
     # prepare image for circle and line detection
     prep = preprocess_img(prep)
 
+
     if not draw:
         cv2.imshow(window_name, prep)
         cv2.waitKey(0)
         sys.exit("terminating early")
+
+    err_msg = "ERROR"
+    font_size = (height / 80)
+    hor_offset = font_size * 12 * sum(c.isdigit() for c in err_msg)
+    ver_offset = 0
+    value_position = (int(width*0.3), int(height*0.5))
+    cv2.putText(blank, err_msg, value_position,
+                cv2.FONT_HERSHEY_PLAIN,
+                fontScale=font_size, color=DEF.RED, thickness=10)
+    cv2.imwrite("canvas.jpg", blank)
 
     # Hough transforms (circles, lines, plines)
     if hough_circle:
@@ -248,7 +260,6 @@ def main():
             cv2.circle(mask, (c[0], c[1]), int(c[2] * scale_factor), (255, 255, 255), -1)
             # mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
             prep = cv2.bitwise_and(prep, mask)
-
 
     if hough_line:
         lines = cv2.HoughLines(prep, 3, np.pi / 90, 100)
