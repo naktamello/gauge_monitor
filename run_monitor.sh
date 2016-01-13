@@ -1,4 +1,11 @@
 #!/bin/bash
+control_c()
+# run if user hits control-c
+{
+  echo -en "\n*** Ouch! Exiting ***\n"
+  exit $?
+}
+ 
 ps cax | grep fbcp > /dev/null
 if [ $? -eq 0 ]; then
   echo "Process is running."
