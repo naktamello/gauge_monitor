@@ -98,7 +98,7 @@ def find_contour(this_object, img, draw=False):
     copy = np.zeros_like(img)  # output image
     np.copyto(copy, img)
 
-    _, contours, hierarchy = cv2.findContours(copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    _, contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if contours is not None and len(contours) > 0:
         num_objects = len(contours)
         # print("objects = %d" % numObjects )
@@ -108,7 +108,7 @@ def find_contour(this_object, img, draw=False):
                 area = moment['m00']
                 if area > DEF.AREA:
                     # print("area = %d" % area)
-                    object = this_object
+                    object = Gauge()
                     object.area = area
                     object.x = int(moment['m10'] / area)
                     object.y = int(moment['m01'] / area)
@@ -121,7 +121,7 @@ def find_contour(this_object, img, draw=False):
     if draw:
         assert (len(objects) <= len(contours)), \
         "objects: %d, contours: %d" % (len(objects), len(contours))
-        while len(objects > 0):
+        while (len(objects) > 0):
             this_contour = objects.pop()
             # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
             cv2.drawContours(img, contours, this_contour.position, DEF.WHITE, 5, 2)
@@ -269,6 +269,7 @@ def main():
             # mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
             prep = cv2.bitwise_and(prep, mask)
 
+    prep = find_contour(gauge, prep, draw=True)
     if hough_line:
         lines = cv2.HoughLines(prep, 3, np.pi / 90, 100)
 
@@ -294,7 +295,7 @@ def main():
         error_output(error_screen, err_msg="no lines found")
         sys.exit("there are no lines inside the cicle")  # if no lines are found terminate the program here
     else:
-        for line in lines[:3]:
+        for line in lines[:4]:
             for (rho, theta) in line:
                 # blue for infinite lines (only draw the 2 strongest)
                 x0 = np.cos(theta) * rho
@@ -304,7 +305,7 @@ def main():
                 gauge.lines.append((pt1, pt2))
                 gauge.angles_in_radians.append(theta)
                 gauge.angles_in_degrees.append(rad_to_degrees(theta))
-                cv2.line(prep,pt1,pt2, (255, 0, 0), DEF.THICKNESS)
+                cv2.line(prep,pt1,pt2, (255, 0, 0), DEF.THICKNESS/2)
     number_of_angles = len(gauge.angles_in_degrees)
     angle_index = get_angles(gauge.angles_in_degrees)
     angle_set = set(tuple(sorted(l)) for l in angle_index)
@@ -398,7 +399,7 @@ def main():
 
     host.write_to_file("Pressure: " + display_value + " MPa", "Temperature: " + str(host.read_temp()))
     # pass in tuples ("filename.ext", img_to_write)
-    host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas))
+    host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas), ("orig_im.jpg", im))
     host.show_image(canvas)
     #time.sleep(3)
 
