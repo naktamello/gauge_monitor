@@ -18,7 +18,7 @@ then
     fi
     sudo fbi -T 1 canvas.jpg &
 fi
-trap '' 2
+trap control_c SIGINT
 while [ 1 ]
 do
     read -n 1 -p -s key
@@ -35,4 +35,3 @@ do
         sudo fbi -T 1 canvas.jpg
         fi
 done
-trap 2
