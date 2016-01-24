@@ -1,5 +1,6 @@
 #!/usr/bin/python2.7
 
+BLACK = (0, 0, 0)
 BLUE = (255, 0, 0)
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
@@ -10,7 +11,7 @@ AREA = 1000
 #(pressure in Mpa, angle in degrees)
 GAUGE_MIN = {'pressure':0.0, 'angle':45.0}
 GAUGE_MAX = {'pressure':3.5, 'angle':315.0}
-NEEDLE_SHAPE = 6.0
+NEEDLE_SHAPE = 4.0
 THICKNESS = 4
 WIDTH = 720
 MAX_DISTANCE = 200

@@ -1,12 +1,4 @@
 #!/bin/bash
-control_c()
-# run if user hits control-c
-{
-  echo -en "\n*** Ouch! Exiting ***\n"
-  kill -s SIGTERM $!
-  exit 0
-}
- 
 ps cax | grep fbcp > /dev/null
 if [ $? -eq 0 ]; then
   echo "Process is running."
@@ -26,7 +18,6 @@ then
     fi
     sudo fbi -T 1 canvas.jpg &
 fi
-trap control_c SIGINT
 while [ 1 ]
 do
     read -n 1 -p -s key

@@ -17,6 +17,10 @@ try:
     import picamera.array
 except ImportError:
     "picamera.array not found"
+try:
+    from matplotlib import pyplot as plt
+except ImportError:
+    "matplotlib_pyplot not found"
 
 
 def error_output(img,err_msg="ERROR", height=480, width=720):
@@ -127,6 +131,142 @@ def find_contour(this_object, img, draw=False):
             cv2.drawContours(img, contours, this_contour.position, DEF.WHITE, 5, 2)
     return img
 
+
+def _datacheck_peakdetect(x_axis, y_axis):
+    if x_axis is None:
+        x_axis = range(len(y_axis))
+
+    if len(y_axis) != len(x_axis):
+        raise (ValueError,
+                'Input vectors y_axis and x_axis must have same length')
+
+    #needs to be a numpy array
+    y_axis = np.array(y_axis)
+    x_axis = np.array(x_axis)
+    return x_axis, y_axis
+
+
+# https://gist.github.com/sixtenbe/1178136
+def peakdetect(y_axis, x_axis = None, lookahead = 300, delta=0):
+    """
+    Converted from/based on a MATLAB script at:
+    http://billauer.co.il/peakdet.html
+
+    function for detecting local maximas and minmias in a signal.
+    Discovers peaks by searching for values which are surrounded by lower
+    or larger values for maximas and minimas respectively
+
+    keyword arguments:
+    y_axis -- A list containg the signal over which to find peaks
+    x_axis -- (optional) A x-axis whose values correspond to the y_axis list
+        and is used in the return to specify the postion of the peaks. If
+        omitted an index of the y_axis is used. (default: None)
+    lookahead -- (optional) distance to look ahead from a peak candidate to
+        determine if it is the actual peak (default: 200)
+        '(sample / period) / f' where '4 >= f >= 1.25' might be a good value
+    delta -- (optional) this specifies a minimum difference between a peak and
+        the following points, before a peak may be considered a peak. Useful
+        to hinder the function from picking up false peaks towards to end of
+        the signal. To work well delta should be set to delta >= RMSnoise * 5.
+        (default: 0)
+            delta function causes a 20% decrease in speed, when omitted
+            Correctly used it can double the speed of the function
+
+    return -- two lists [max_peaks, min_peaks] containing the positive and
+        negative peaks respectively. Each cell of the lists contains a tupple
+        of: (position, peak_value)
+        to get the average peak value do: np.mean(max_peaks, 0)[1] on the
+        results to unpack one of the lists into x, y coordinates do:
+        x, y = zip(*tab)
+    """
+    max_peaks = []
+    min_peaks = []
+    dump = []   #Used to pop the first hit which almost always is false
+
+    # check input data
+    x_axis, y_axis = _datacheck_peakdetect(x_axis, y_axis)
+    # store data length for later use
+    length = len(y_axis)
+
+
+    #perform some checks
+    if lookahead < 1:
+        raise ValueError, "Lookahead must be '1' or above in value"
+    if not (np.isscalar(delta) and delta >= 0):
+        raise ValueError, "delta must be a positive number"
+
+    #maxima and minima candidates are temporarily stored in
+    #mx and mn respectively
+    mn, mx = np.Inf, -np.Inf
+
+    #Only detect peak if there is 'lookahead' amount of points after it
+    for index, (x, y) in enumerate(zip(x_axis[:-lookahead],
+                                        y_axis[:-lookahead])):
+        if y > mx:
+            mx = y
+            mxpos = x
+        if y < mn:
+            mn = y
+            mnpos = x
+
+        ####look for max####
+        if y < mx-delta and mx != np.Inf:
+            #Maxima peak candidate found
+            #look ahead in signal to ensure that this is a peak and not jitter
+            if y_axis[index:index+lookahead].max() < mx:
+                max_peaks.append([mxpos, mx])
+                dump.append(True)
+                #set algorithm to only find minima now
+                mx = np.Inf
+                mn = np.Inf
+                if index+lookahead >= length:
+                    #end is within lookahead no more peaks can be found
+                    break
+                continue
+            #else:  #slows shit down this does
+            #    mx = ahead
+            #    mxpos = x_axis[np.where(y_axis[index:index+lookahead]==mx)]
+
+        ####look for min####
+        if y > mn+delta and mn != -np.Inf:
+            #Minima peak candidate found
+            #look ahead in signal to ensure that this is a peak and not jitter
+            if y_axis[index:index+lookahead].min() > mn:
+                min_peaks.append([mnpos, mn])
+                dump.append(False)
+                #set algorithm to only find maxima now
+                mn = -np.Inf
+                mx = -np.Inf
+                if index+lookahead >= length:
+                    #end is within lookahead no more peaks can be found
+                    break
+            #else:  #slows shit down this does
+            #    mn = ahead
+            #    mnpos = x_axis[np.where(y_axis[index:index+lookahead]==mn)]
+
+
+    #Remove the false hit on the first value of the y_axis
+    try:
+        if dump[0]:
+            max_peaks.pop(0)
+        else:
+            min_peaks.pop(0)
+        del dump
+    except IndexError:
+        #no peaks were found, should the function return empty lists?
+        pass
+
+    return [max_peaks, min_peaks]
+
+
+def bandpass_filter(image, peak, height=480,width=720, peak_width = 10):
+    mask = np.zeros_like(image)
+    for x, y in np.ndindex((height, width)):
+        if (image[x,y] < peak - peak_width/2) or (image[x,y] >  peak + peak_width/2):
+            mask[x,y] = 255
+    return mask
+
+
 class Gauge:
     x = 0  # these will hold the coordinates of the object "centers". see moments of inertia
     y = 0
@@ -231,7 +371,9 @@ def main():
     im = host.get_image()
     gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     prep = gray_im  # copy of grayscale image to be preprocessed for angle detection
+    prep_history = []
     mask = np.zeros_like(prep)
+    mask_bandpass = np.zeros_like(prep)
     canvas = np.zeros_like(im)  # output image
     np.copyto(canvas, im)
     blank = np.zeros_like(im)
@@ -243,7 +385,25 @@ def main():
 
     # prepare image for circle and line detection
     prep = preprocess_img(prep)
+    hist = cv2.calcHist([gray_im],[0],None,[256],[0,256])
+    # hist = plt.hist(gray_im.ravel(),256,[0,256])
+    # plt.show()
+    hist_list = list(hist)
+    [max, min] = peakdetect(hist, lookahead=10, delta=150)
+    # first element of max is the gauge needle (darkest peak excluding 0)
+    assert (max is not None and (max[0][0] > 0 and max[0][0] < 50))
+    print "max: ", max
+    #plt.savefig("hist.png")
+    # for x, y in np.ndindex((height,width)):
+    #     if (gray_im[x,y] > 45 - 20) and (gray_im[x,y] <  45 + 20):
+    #         mask_debug[x,y] = 255
+    # for x, y in np.ndindex((height,width)):
+    #     if (gray_im[x,y] > 120 - 20) and (gray_im[x,y] <  120 + 20):
+    #         mask_debug[x,y] = 255
+    mask_bandpass = bandpass_filter(gray_im,max[0][0], peak_width=15)
 
+    #cv2.imshow(window_name, mask_debug)
+    #cv2.waitKey(0)
 
     if not draw:
         cv2.imshow(window_name, prep)
@@ -269,9 +429,9 @@ def main():
             # mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
             prep = cv2.bitwise_and(prep, mask)
 
-    prep = find_contour(gauge, prep, draw=True)
+    #prep = find_contour(gauge, prep, draw=True)
     if hough_line:
-        lines = cv2.HoughLines(prep, 3, np.pi / 90, 100)
+        lines = cv2.HoughLines(prep, 4, np.pi / 360, 600)
 
     if hough_pline:
         plines = cv2.HoughLinesP(prep, 1, np.pi / 180, 20, None, minLineLength=height / 10, maxLineGap=1)
@@ -291,11 +451,15 @@ def main():
     print "radius: ", radius
     print "width: ", width
 
+    #prep=cv2.Canny(prep,25,155)
+    mask_bandpass = (255 - mask_bandpass)
+    prep=cv2.bitwise_and(mask_bandpass, prep)
+    prep_rgb=cv2.cvtColor(prep,cv2.COLOR_GRAY2BGR)
     if lines is None:
         error_output(error_screen, err_msg="no lines found")
         sys.exit("there are no lines inside the cicle")  # if no lines are found terminate the program here
     else:
-        for line in lines[:4]:
+        for line in lines[:10]:
             for (rho, theta) in line:
                 # blue for infinite lines (only draw the 2 strongest)
                 x0 = np.cos(theta) * rho
@@ -305,14 +469,14 @@ def main():
                 gauge.lines.append((pt1, pt2))
                 gauge.angles_in_radians.append(theta)
                 gauge.angles_in_degrees.append(rad_to_degrees(theta))
-                cv2.line(prep,pt1,pt2, (255, 0, 0), DEF.THICKNESS/2)
+                cv2.line(prep_rgb,pt1,pt2, (255, 0, 0), DEF.THICKNESS/2)
     number_of_angles = len(gauge.angles_in_degrees)
     angle_index = get_angles(gauge.angles_in_degrees)
     angle_set = set(tuple(sorted(l)) for l in angle_index)
     print "lengh: ", len(angle_index)
     print
     if len(gauge.lines) < 2:
-        error_output(error_screen, err_msg="unable to find needle form lines")
+        error_output(error_screen, err_msg="unable to find needle from lines")
         sys.exit("unable to find needle form lines")
 
     line_found = False
@@ -397,10 +561,24 @@ def main():
                 # red for line segments
                 cv2.line(canvas, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), DEF.THICKNESS)
 
+    plt.subplot(221)
+    plt.imshow(cv2.cvtColor(im,cv2.COLOR_BGR2RGB))
+    plt.subplot(222)
+    plt.imshow(prep, 'gray')
+    plt.subplot(223)
+    plt.imshow(cv2.cvtColor(canvas,cv2.COLOR_BGR2RGB))
+    plt.subplot(224)
+    plt.plot(hist)
+    plt.xlim([0, 256])
+    plt.ylim([0,7500])
+    plt.show()
     host.write_to_file("Pressure: " + display_value + " MPa", "Temperature: " + str(host.read_temp()))
     # pass in tuples ("filename.ext", img_to_write)
-    host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas), ("orig_im.jpg", im))
-    host.show_image(canvas)
+    #host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas), ("orig_im.jpg", im))
+    prep = cv2.cvtColor(prep,cv2.COLOR_GRAY2BGR)
+    canvas = np.concatenate((prep, canvas), axis=1)
+    canvas = np.concatenate((prep_rgb, canvas), axis=1)
+    #host.show_image(canvas)
     #time.sleep(3)
 
     return True

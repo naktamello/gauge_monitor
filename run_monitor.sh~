@@ -1,10 +1,4 @@
 #!/bin/bash
-control_c()
-# run if user hits control-c
-{
-  echo -en "\n*** Ouch! Exiting ***\n"
-  exit $?
-}
  
 ps cax | grep fbcp > /dev/null
 if [ $? -eq 0 ]; then
@@ -25,20 +19,23 @@ then
     fi
     sudo fbi -T 1 canvas.jpg &
 fi
-trap control_c SIGINT
 while [ 1 ]
 do
-    read -n 1 -p -s key
-        python gauge_det.py
-        echo "running"
-        if [ -e "canvas.jpg" ]
-            then
-            ps cax | grep fbi > /dev/null
-            if pgrep fbi >/dev/null
-            then
-                echo "kill running fbi"
-                sudo killall fbi
+    read -n 1 -p key
+	if [[$key = q]]
+        then
+            break
+        else        
+	    python gauge_det.py
+            echo "running"
+            if [ -e "canvas.jpg" ]
+                then
+                ps cax | grep fbi > /dev/null
+                if pgrep fbi >/dev/null
+                then
+                    echo "kill running fbi"
+                    sudo killall fbi
             fi
-        sudo fbi -T 1 canvas.jpg
+            sudo fbi -T 1 canvas.jpg
         fi
 done

@@ -1,27 +1,53 @@
-#!/bin/bash
+#!/bin/sh
+#
+# init script for monitor_startup
+#
 
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin
+ ### BEGIN INIT INFO
+ # Provides:          monitor_startup
+ # Required-Start:    $remote_fs $syslog $network
+ # Required-Stop:     $remote_fs $syslog $network
+ # Default-Start:     2 3 4 5
+ # Default-Stop:      0 1 6
+ # Short-Description: init script for the monitor_startup
+ # Description:       We'll have to fill this out later...
+ ### END INIT INFO
 
-case "$1" in
-  start)
-    echo "Starting gauge_det"
-    # run application you want to start
-start
-echo "gauge_monitor startup script"
-    ENV=cv3
-    source /virtualenvs/$ENV/bin/activate
-    /rpi-fbcp/build/fbcp &
-    /gauge_monitor/gauge_det.py
-    ;;
-  stop)
-    echo "Stopping gauge_det"
-    # kill application you want to stop
-    killall gauge_det.py
-    ;;
-  *)
-    echo "Usage: /etc/init.d/monitor_startup {start|stop}"
-    exit 1
-    ;;
-esac
+ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ NAME=monitor_startup
+ DAEMON=/home/pi/gauge_monitor/gauge_det.py
+ DAEMONARGS=""
+ PIDFILE=/var/run/$NAME.pid
+ LOGFILE=/var/log/$NAME.log
 
-exit 0
+ . /lib/lsb/init-functions
+
+ test -f $DAEMON || exit 0
+
+ case "$1" in
+     start)
+         start-stop-daemon --start --background \
+             --pidfile $PIDFILE --make-pidfile --startas /bin/bash \
+             -- -c "exec stdbuf -oL -eL $DAEMON $DAEMONARGS > $LOGFILE 2>&1"
+         log_end_msg $?
+         ;;
+     stop)
+         start-stop-daemon --stop --pidfile $PIDFILE
+         log_end_msg $?
+         rm -f $PIDFILE
+         ;;
+     restart)
+         $0 stop
+         $0 start
+         ;;
+     status)
+         start-stop-daemon --status --pidfile $PIDFILE
+         log_end_msg $?
+         ;;
+     *)
+         echo "Usage: $0 {start|stop|restart|status}"
+         exit 2
+         ;;
+ esac
+
+ exit 0
