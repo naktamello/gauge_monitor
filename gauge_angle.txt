@@ -1,2 +1,2 @@
-Pressure: 2.18 MPa
+Pressure: 1.07 MPa
 Temperature: OFF
