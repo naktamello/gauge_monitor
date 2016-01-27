@@ -3,6 +3,8 @@ import time
 import cv2
 import os, platform, subprocess, re
 import temp_sensor
+import defines as DEF
+from datetime import datetime
 
 # rasbperry modules
 try:
@@ -13,6 +15,32 @@ try:
     import picamera.array
 except ImportError:
     "picamera.array not found"
+
+
+def test_time():
+    f=open('gauge_data.txt','r')
+    f=list(f)
+    for line in f[:1]:
+        t1 = datetime.strptime(line.rstrip(), "%Y-%m-%d %H:%M:%S.%f")
+        diff = datetime.now() - t1
+        if diff.total_seconds() < 3600:
+            return True
+    return False
+
+
+def return_circle():
+    with open('gauge_data.txt') as searchfile:
+        for line in searchfile:
+            _, sep, right = line.partition('circle_x')
+            if sep: # True iff 'Figure' in line
+                circle_x = float(right[1:].rstrip())
+            _, sep, right = line.partition('circle_y')
+            if sep: # True iff 'Figure' in line
+                circle_y = float(right[1:].rstrip())
+            _, sep, right = line.partition('radius')
+            if sep: # True iff 'Figure' in line
+                radius = int(right[1:].rstrip())
+    return circle_x, circle_y, radius
 
 class OS:
     def __init__(self):
@@ -46,7 +74,7 @@ class OS:
             subprocess.call("gpio write 4 0", shell=True)
             return gauge_image
         else:
-            image_path = "./img_samples/011.jpg"
+            image_path = DEF.IMG_PATH
             # cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             im = cv2.imread(image_path)
             return im
@@ -66,9 +94,11 @@ class OS:
         for img in imgs:
             cv2.imwrite(img[0], img[1])
 
-    def write_to_file(self, *input_text):
+    def write_to_file(self, mode, *input_text):
         lines = list(input_text)
-        f = open('./gauge_angle.txt', 'w')
+        f = open('./gauge_data.txt', mode)
+        if mode is 'w':
+            f.write(str(datetime.now())+"\n")
         for line in lines:
             f.write(line+"\n")
         f.close()

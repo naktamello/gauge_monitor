@@ -1,0 +1,28 @@
+#!/bin/bash
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin
+
+case "$1" in
+  start)
+    echo "Starting gauge_det"
+    # run application you want to start
+start
+echo "gauge_monitor startup script"
+    ENV=cv3
+    source /virtualenvs/$ENV/bin/activate
+    /rpi-fbcp/build/fbcp &
+    /gauge_monitor/gauge_det.py
+    ;;
+  stop)
+    echo "Stopping gauge_det"
+    # kill application you want to stop
+    killall gauge_det.py
+    ;;
+  *)
+    echo "Usage: /etc/init.d/monitor_startup {start|stop}"
+    exit 1
+    ;;
+esac
+
+exit 0
+

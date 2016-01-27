@@ -59,12 +59,19 @@ def smooth(x,window_len=11,window='hanning'):
     y=np.convolve(w/w.sum(),s[0],mode='valid')
     return y
 
+# def bandpass_filter(image, peak, height=1000,width=1000, peak_width = 10):
+#     mask = np.zeros_like(image)
+#     for x, y in np.ndindex((height, width)):
+#         if (image[x,y] < peak - peak_width/2) or (image[x,y] >  peak + peak_width/2):
+#             mask[x,y] = 255
+#     return mask
 def bandpass_filter(image, peak, height=1000,width=1000, peak_width = 10):
-    mask = np.zeros_like(image)
-    for x, y in np.ndindex((height, width)):
-        if (image[x,y] < peak - peak_width/2) or (image[x,y] >  peak + peak_width/2):
-            mask[x,y] = 255
+    # mask = np.zeros_like(image)
+    mask0 = cv2.threshold(image, peak + peak_width/2, 255, cv2.THRESH_BINARY_INV)
+    mask1 = cv2.threshold(image, peak - peak_width/2, 255, cv2.THRESH_BINARY)
+    mask = 255-cv2.bitwise_and(mask0[1], mask1[1])
     return mask
+
 
 def _datacheck_peakdetect(x_axis, y_axis):
     if x_axis is None:
@@ -205,6 +212,7 @@ def bandpass(gray_im):
     # assert (max is not None and (max[0][0] > 0 and max[0][0] < 50))
     print "max: ", max
     mask_bandpass0 = bandpass_filter(gray_im,max[0][0], peak_width=50)
+    # mask_bandpass0 = bandpass_filter(gray_im,50, peak_width=50)
     mask_bandpass1 = bandpass_filter(gray_im,0, peak_width=10)
     mask_bandpass = cv2.bitwise_and(mask_bandpass0, mask_bandpass1)
     mask_bandpass = (255 - mask_bandpass)

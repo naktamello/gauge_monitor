@@ -19,7 +19,6 @@ except ImportError:
 
 window_name = 'gauge'
 
-
 def display_values(canvas, display_value):
     display_unit = "MPa"
     font_size = (DEF.HEIGHT / 80)
@@ -43,6 +42,7 @@ def main():
     host = housekeeping.OS()
 
     # setup image
+    reuse_circle = housekeeping.test_time()
     im = host.get_image()
     gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     prep = gray_im  # copy of grayscale image to be preprocessed for angle detection
@@ -58,17 +58,25 @@ def main():
     hist0, mask_bandpass = hist_an.bandpass(gray_im)
     # prep is binary image ready for line detection
     prep = process_image.blur_n_threshold(prep)
-
+    host.write_image(("mask_bandpass.jpg", mask_bandpass))
     # Hough transforms
-    circles = hough_transforms.hough_c(gray_im)
-    for c in circles[:1]:
-        # scale factor makes applicable area slightly larger just to be safe we are not missing anything
-        cv2.circle(mask, (c[0], c[1]), int(c[2] * DEF.CIRCLE_SCALE_FACTOR), (255, 255, 255), -1)
-        prep = cv2.bitwise_and(prep, mask)
-        cv2.circle(canvas, (c[0], c[1]), c[2], (0, 255, 0), DEF.THICKNESS)
-        circle_x = c[0]
-        circle_y = c[1]
-        radius = int(c[2])
+    if reuse_circle:
+        print "reusing previous circle"
+        circle_x, circle_y, radius = housekeeping.return_circle()
+    else:
+        circles = hough_transforms.hough_c(gray_im)
+        for c in circles[:1]:
+            # scale factor makes applicable area slightly larger just to be safe we are not missing anything
+            cv2.circle(mask, (c[0], c[1]), int(c[2] * DEF.CIRCLE_SCALE_FACTOR), (255, 255, 255), -1)
+            prep = cv2.bitwise_and(prep, mask)
+            cv2.circle(canvas, (c[0], c[1]), c[2], (0, 255, 0), DEF.THICKNESS)
+            circle_x = c[0]
+            circle_y = c[1]
+            radius = int(c[2])
+
+    cv2.circle(mask, (int(circle_x), int(circle_y)), int(radius * DEF.CIRCLE_SCALE_FACTOR), (255, 255, 255), -1)
+    cv2.circle(canvas, (int(circle_x), int(circle_y)), radius, (0, 255, 0), DEF.THICKNESS)
+    prep = cv2.bitwise_and(prep, mask)
 
     lines = hough_transforms.hough_l(prep)
 
@@ -169,7 +177,8 @@ def main():
     plt.xlim([0, 256])
     plt.ylim([0, 50000])
     plt.show()
-    host.write_to_file("Pressure: " + pressure_str + " MPa", "Temperature: " + str(host.read_temp()))
+    host.write_to_file('w', "Pressure: " + pressure_str + " MPa", "Temperature: " + str(host.read_temp()))
+    host.write_to_file('a', "circle_x:" + str(circle_x), "circle_y:" + str(circle_y), "radius:" + str(radius))
     # pass in tuples ("filename.ext", img_to_write)
     # host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas), ("orig_im.jpg", im))
     prep = cv2.cvtColor(prep, cv2.COLOR_GRAY2BGR)

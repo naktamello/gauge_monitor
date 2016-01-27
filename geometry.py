@@ -31,14 +31,18 @@ def rad_to_degrees(radians):
 
 
 def get_angles(angle_vals):
+    avg_angle = sum(angle_vals)/len(angle_vals)
     possible_angles = []
     for i in range(len(angle_vals)):
         cur_angle = angle_vals[i]
         for j in range(len(angle_vals)):
             if j == i:
                 continue
-            angle_diff = abs(cur_angle - angle_vals[j])
-            # print i, j, angle_diff
-            if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
-                possible_angles.append((i, j))
+            next_angle = angle_vals[j]
+            angle_diff = abs(cur_angle - next_angle)
+            avg_this_pair = (cur_angle + next_angle)/2
+            per_diff = float(avg_this_pair/avg_angle)
+            if (per_diff < 1.1) and (per_diff > 0.9):
+                if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
+                    possible_angles.append((i, j))
     return possible_angles
