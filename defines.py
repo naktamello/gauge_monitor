@@ -19,4 +19,4 @@ HEIGHT = 1000
 MAX_DISTANCE = 200
 CIRCLE_SCALE_FACTOR = 1.15
 
-IMG_PATH = "./img_samples/005.jpg"
+IMG_PATH = "./img_samples/035.jpg"

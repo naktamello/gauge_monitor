@@ -81,8 +81,8 @@ class OS:
 
     def show_image(self, img):
         if self.running_on_pi:
-            #if os.path.exists("./canvas.jpg"):
-                #subprocess.call("sudo fbi -T 1 canvas.jpg", shell=True)
+            if os.path.exists("./canvas.jpg"):
+                subprocess.call("sudo fbi -T 1 canvas.jpg", shell=True)
             pass
         else:
             pass

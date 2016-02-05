@@ -11,6 +11,7 @@ import hough_transforms
 import geometry
 import process_image
 import housekeeping
+import datetime
 
 try:
     from matplotlib import pyplot as plt
@@ -176,15 +177,15 @@ def main():
     plt.plot(hist0)
     plt.xlim([0, 256])
     plt.ylim([0, 50000])
-    plt.show()
+    # plt.show()
     host.write_to_file('w', "Pressure: " + pressure_str + " MPa", "Temperature: " + str(host.read_temp()))
     host.write_to_file('a', "circle_x:" + str(circle_x), "circle_y:" + str(circle_y), "radius:" + str(radius))
     # pass in tuples ("filename.ext", img_to_write)
     # host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas), ("orig_im.jpg", im))
     prep = cv2.cvtColor(prep, cv2.COLOR_GRAY2BGR)
     canvas = np.concatenate((prep, canvas), axis=1)
-    # host.show_image(canvas)
-    # cv2.waitKey(0)
+    cv2.imshow('gauge', canvas)
+    cv2.waitKey(0)
 
     return True
 
