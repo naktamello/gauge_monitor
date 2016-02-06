@@ -6,7 +6,7 @@ GREEN = (0, 255, 0)
 RED = (0, 0, 255)
 WHITE = (255, 255, 255)
 YELLOW = (52, 255, 255)
-AREA = 1500
+AREA = 1000
 
 # (pressure in Mpa, angle in degrees)
 GAUGE_MIN = {'pressure':0.0, 'angle':45.0}
@@ -16,7 +16,8 @@ NEEDLE_SHAPE = 4.0
 THICKNESS = 4
 WIDTH = 1000
 HEIGHT = 1000
-MAX_DISTANCE = 200
+KERNEL = (15,15)
+MAX_DISTANCE = 150
 CIRCLE_SCALE_FACTOR = 1.15
 
-IMG_PATH = "./img_samples/035.jpg"
+IMG_PATH = "./img_samples/017.jpg"

@@ -20,6 +20,7 @@ except ImportError:
 
 window_name = 'gauge'
 
+
 def display_values(canvas, display_value):
     display_unit = "MPa"
     font_size = (DEF.HEIGHT / 80)
@@ -58,7 +59,8 @@ def main():
     # mask_bandpass is a mask of the gauge obtained from histogram peaks
     hist0, mask_bandpass = hist_an.bandpass(gray_im)
     # prep is binary image ready for line detection
-    prep = process_image.blur_n_threshold(prep)
+    prep = process_image.blur_n_threshold(prep,do_blur=1)
+    prep = process_image.erode_n_dilate(prep)
     host.write_image(("mask_bandpass.jpg", mask_bandpass))
     # Hough transforms
     if reuse_circle:
@@ -79,9 +81,13 @@ def main():
     cv2.circle(canvas, (int(circle_x), int(circle_y)), radius, (0, 255, 0), DEF.THICKNESS)
     prep = cv2.bitwise_and(prep, mask)
 
-    lines = hough_transforms.hough_l(prep)
-
     prep = cv2.bitwise_and(mask_bandpass, prep)
+    cv2.imshow('gauge', prep)
+    cv2.waitKey(0)
+    prep = process_image.find_contour(prep, draw=True)
+    cv2.imshow('gauge', prep)
+    cv2.waitKey(0)
+    lines = hough_transforms.hough_l(prep)
 
     for line in lines[:10]:
         for (rho, theta) in line:
@@ -93,7 +99,7 @@ def main():
             gauge.lines.append((pt1, pt2))
             gauge.angles_in_radians.append(theta)
             gauge.angles_in_degrees.append(geometry.rad_to_degrees(theta))
-            # cv2.line(prep_rgb, pt1, pt2, (255, 0, 0), DEF.THICKNESS / 2)
+            cv2.line(canvas, pt1, pt2, (255, 0, 0), DEF.THICKNESS / 2)
     angle_index = geometry.get_angles(gauge.angles_in_degrees)
 
     if len(gauge.lines) < 2:

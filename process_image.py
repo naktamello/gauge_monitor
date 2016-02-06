@@ -21,8 +21,8 @@ class Gauge:
 
 
 def erode_n_dilate(image):
-    erode_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    dilate_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4, 4))
+    erode_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, DEF.KERNEL)
+    dilate_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, DEF.KERNEL)
     image = cv2.erode(image, erode_element, 2)
     image = cv2.dilate(image, dilate_element, 1)
     return image
@@ -31,7 +31,7 @@ def erode_n_dilate(image):
 def blur_n_threshold(prep,do_blur=0, do_threshold=1):
     # preprocessing image:
     if do_blur:
-        prep = cv2.GaussianBlur(prep, (3, 3), 2, 2)
+        prep = cv2.GaussianBlur(prep, (15, 15), 0)
 
     if do_threshold:
         # create structuring element that will be used to "dilate" and "erode" image.
@@ -47,7 +47,7 @@ def blur_n_threshold(prep,do_blur=0, do_threshold=1):
     return prep
 
 
-def find_contour(this_object, img, draw=False):
+def find_contour(img, draw=False):
     objects = []
     copy = np.zeros_like(img)  # output image
     np.copyto(copy, img)
@@ -72,11 +72,14 @@ def find_contour(this_object, img, draw=False):
                     # print "area is greater than .."
                     objectFound = True
                     # else: objectFound = False
+
     if draw:
         assert (len(objects) <= len(contours)), \
         "objects: %d, contours: %d" % (len(objects), len(contours))
         while (len(objects) > 0):
             this_contour = objects.pop()
-            # contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
-            cv2.drawContours(img, contours, this_contour.position, DEF.WHITE, 5, 2)
+            # epsilon = 0.001*cv2.arcLength(contours[this_contour.position],False)
+            # contours[this_contour.position] = cv2.approxPolyDP(contours[this_contour.position],epsilon,False)
+            # contours[this_contour.position] = cv2.convexHull(contours[this_contour.position], returnPoints = True)
+            cv2.drawContours(img, contours, this_contour.position, DEF.WHITE, 2, 2)
     return img

@@ -23,7 +23,7 @@ def hough_c(gray_im):
 
 
 def hough_l(prep):
-    lines = cv2.HoughLines(prep, 4, np.pi / 360, 600)
+    lines = cv2.HoughLines(prep, 4, np.pi / 360, 500)
     if lines is None:
         EX.error_output(error_screen, err_msg="no lines found")
         sys.exit("there are no lines inside the circle")  # if no lines are found terminate the program here
