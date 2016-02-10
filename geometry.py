@@ -29,6 +29,9 @@ def rad_to_degrees(radians):
     degrees = (radians * 360 / (2 * np.pi))
     return degrees
 
+def degrees_to_radians(degrees):
+    radians = degrees * (2 * np.pi) / 360
+    return radians
 
 def get_angles(angle_vals):
     avg_angle = sum(angle_vals)/len(angle_vals)
@@ -42,7 +45,7 @@ def get_angles(angle_vals):
             angle_diff = abs(cur_angle - next_angle)
             avg_this_pair = (cur_angle + next_angle)/2
             per_diff = float(avg_this_pair/avg_angle)
-            if (per_diff < 1.1) and (per_diff > 0.9):
-                if (angle_diff > (DEF.NEEDLE_SHAPE - 0.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 0.5)):
+            if (per_diff < 1.2) and (per_diff > 0.8):
+                if (angle_diff > (DEF.NEEDLE_SHAPE - 1.5)) and (angle_diff < (DEF.NEEDLE_SHAPE + 1.5)):
                     possible_angles.append((i, j))
     return possible_angles

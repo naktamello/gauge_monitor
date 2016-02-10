@@ -211,9 +211,9 @@ def bandpass(gray_im):
     # first element of max is the gauge needle (darkest peak excluding 0)
     # assert (max is not None and (max[0][0] > 0 and max[0][0] < 50))
     print "max: ", max
-    mask_bandpass0 = bandpass_filter(gray_im,max[0][0], peak_width=50)
+    mask_bandpass0 = bandpass_filter(gray_im,max[0][0], peak_width=60)
     # mask_bandpass0 = bandpass_filter(gray_im,50, peak_width=50)
-    mask_bandpass1 = bandpass_filter(gray_im,0, peak_width=10)
+    mask_bandpass1 = bandpass_filter(gray_im,0, peak_width=50)
     mask_bandpass = cv2.bitwise_and(mask_bandpass0, mask_bandpass1)
     mask_bandpass = (255 - mask_bandpass)
     return hist0, mask_bandpass

@@ -18,6 +18,8 @@ except ImportError:
 
 
 def test_time():
+    here = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(here)
     f=open('gauge_data.txt','r')
     f=list(f)
     for line in f[:1]:
@@ -44,7 +46,7 @@ def return_circle():
 
 class OS:
     def __init__(self):
-        self.processor = self.get_processor_name(self)
+        self.processor = self.get_processor_name()
         if "ARMv7" in self.processor:
             print "running on Raspberry Pi 2"
             #subprocess.call("~/rpi-fbcp/build/fbcp &", shell=True)
@@ -63,7 +65,7 @@ class OS:
         self.temperature = temp_sensor.read_temp()
         return self.temperature
 
-    def get_image(self):
+    def get_image(self, file_name, input_path):
         if self.running_on_pi:
             subprocess.call("gpio write 4 1", shell=True)
             time.sleep(0.1)
@@ -74,11 +76,20 @@ class OS:
             subprocess.call("gpio write 4 0", shell=True)
             return gauge_image
         else:
-            image_path = DEF.IMG_PATH
+            image_path = re.sub('file', str(input_path), file_name)
             # cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             im = cv2.imread(image_path)
             return im
 
+    @staticmethod
+    def write_image(*img_tuple):
+        here = os.path.dirname(os.path.abspath(__file__))
+        os.chdir(here)
+        imgs = list(img_tuple)
+        for img in imgs:
+            cv2.imwrite(img[0], img[1])
+
+    @staticmethod
     def show_image(self, img):
         if self.running_on_pi:
             if os.path.exists("./canvas.jpg"):
@@ -89,14 +100,12 @@ class OS:
             # cv2.imshow(window_name, img)
             # cv2.waitKey(0)
 
-    def write_image(self, *img_tuple):
-        imgs = list(img_tuple)
-        for img in imgs:
-            cv2.imwrite(img[0], img[1])
-
-    def write_to_file(self, mode, *input_text):
+    @staticmethod
+    def write_to_file(mode, *input_text):
+        here = os.path.dirname(os.path.abspath(__file__))
+        os.chdir(here)
         lines = list(input_text)
-        f = open('./gauge_data.txt', mode)
+        f = open('./gauge_data.txt', mode=mode)
         if mode is 'w':
             f.write(str(datetime.now())+"\n")
         for line in lines:
@@ -104,7 +113,7 @@ class OS:
         f.close()
 
     @staticmethod
-    def get_processor_name(self):
+    def get_processor_name():
         if platform.system() == "Windows":
             return platform.processor()
         elif platform.system() == "Darwin":

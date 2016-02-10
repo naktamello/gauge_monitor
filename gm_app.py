@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-import sys
-import math
+import sys, re, os, math
 import numpy as np
 import cv2
 # user modules
@@ -11,7 +10,6 @@ import hough_transforms
 import geometry
 import process_image
 import housekeeping
-import datetime
 
 try:
     from matplotlib import pyplot as plt
@@ -19,6 +17,17 @@ except ImportError:
     "matplotlib_pyplot not found"
 
 window_name = 'gauge'
+
+
+class Reference:
+    def __init__(self, val):
+        self._value = val  # just refers to val, no copy
+
+    def get(self):
+        return self._value
+
+    def set(self, val):
+        self._value = val
 
 
 def display_values(canvas, display_value):
@@ -36,16 +45,12 @@ def display_values(canvas, display_value):
                 fontScale=font_size / 2, color=DEF.RED, thickness=4)
 
 
-def main():
-    # parameters
+def app(input_file, output_file):
     gauge = process_image.Gauge()
-
-    # instance of OS class that contains all interactions with host machine
     host = housekeeping.OS()
-
     # setup image
     reuse_circle = housekeeping.test_time()
-    im = host.get_image()
+    im = host.get_image(DEF.SAMPLE_PATH, input_file)
     gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     prep = gray_im  # copy of grayscale image to be preprocessed for angle detection
     mask = np.zeros_like(prep)
@@ -59,13 +64,15 @@ def main():
     # mask_bandpass is a mask of the gauge obtained from histogram peaks
     hist0, mask_bandpass = hist_an.bandpass(gray_im)
     # prep is binary image ready for line detection
-    prep = process_image.blur_n_threshold(prep,do_blur=1)
+    prep = process_image.blur_n_threshold(prep, do_blur=1)
     prep = process_image.erode_n_dilate(prep)
-    host.write_image(("mask_bandpass.jpg", mask_bandpass))
+    # host.write_image(("mask_bandpass.jpg", mask_bandpass))
     # Hough transforms
     if reuse_circle:
         print "reusing previous circle"
         circle_x, circle_y, radius = housekeeping.return_circle()
+        circle_x = int(circle_x)
+        circle_y = int(circle_y)
     else:
         circles = hough_transforms.hough_c(gray_im)
         for c in circles[:1]:
@@ -79,14 +86,13 @@ def main():
 
     cv2.circle(mask, (int(circle_x), int(circle_y)), int(radius * DEF.CIRCLE_SCALE_FACTOR), (255, 255, 255), -1)
     cv2.circle(canvas, (int(circle_x), int(circle_y)), radius, (0, 255, 0), DEF.THICKNESS)
+    cv2.circle(canvas, (int(circle_x), int(circle_y-12)), 25, (0, 255, 0), DEF.THICKNESS)
     prep = cv2.bitwise_and(prep, mask)
 
     prep = cv2.bitwise_and(mask_bandpass, prep)
-    cv2.imshow('gauge', prep)
-    cv2.waitKey(0)
+    thresholded = np.copy(prep)
     prep = process_image.find_contour(prep, draw=True)
-    cv2.imshow('gauge', prep)
-    cv2.waitKey(0)
+
     lines = hough_transforms.hough_l(prep)
 
     for line in lines[:10]:
@@ -99,9 +105,15 @@ def main():
             gauge.lines.append((pt1, pt2))
             gauge.angles_in_radians.append(theta)
             gauge.angles_in_degrees.append(geometry.rad_to_degrees(theta))
-            cv2.line(canvas, pt1, pt2, (255, 0, 0), DEF.THICKNESS / 2)
+            # cv2.line(canvas, pt1, pt2, (255, 255, 0), DEF.THICKNESS / 3)
+    # check standard deviation of angles to catch angle wrap-around (359 to 0)
+    angle_std = np.std(gauge.angles_in_degrees)
+    if angle_std > 50:
+        for i in range(len(gauge.angles_in_degrees)):
+            if gauge.angles_in_degrees[i] < 20:
+                gauge.angles_in_degrees[i] += 180
+                gauge.angles_in_radians[i] += np.pi
     angle_index = geometry.get_angles(gauge.angles_in_degrees)
-
     if len(gauge.lines) < 2:
         EX.error_output(error_screen, err_msg="unable to find needle from lines")
         sys.exit("unable to find needle form lines")
@@ -110,7 +122,7 @@ def main():
     for this_pair in angle_index:
         # print "angle1: ", gauge.angles_in_degrees[this_pair[0]]
         # print "angle2: ", gauge.angles_in_degrees[this_pair[1]]
-
+        print this_pair
         line1 = geometry.make_line(gauge.lines[this_pair[0]])
         line2 = geometry.make_line(gauge.lines[this_pair[1]])
         intersecting_pt = geometry.intersection(line1, line2)
@@ -148,10 +160,10 @@ def main():
         if line_found is True:
             cv2.circle(canvas, guess1[1], 10, DEF.GREEN, 3)
             cv2.circle(canvas, guess2[1], 10, DEF.BLUE, 3)
-            cv2.line(canvas, gauge.lines[this_pair[0]][0], gauge.lines[this_pair[0]][1], (255, 0, 0),
-                     DEF.THICKNESS)
-            cv2.line(canvas, gauge.lines[this_pair[1]][0], gauge.lines[this_pair[1]][1], (255, 0, 0),
-                     DEF.THICKNESS)
+            # cv2.line(canvas, gauge.lines[this_pair[0]][0], gauge.lines[this_pair[0]][1], (255, 0, 0),
+            #          DEF.THICKNESS)
+            # cv2.line(canvas, gauge.lines[this_pair[1]][0], gauge.lines[this_pair[1]][1], (255, 0, 0),
+            #          DEF.THICKNESS)
             break
 
     if line_found is False:
@@ -160,38 +172,73 @@ def main():
     else:
         ref_offset = np.pi
         needle_angle = geometry.rad_to_degrees(correct_guess[0] - ref_offset)
-    print "correct angle(cv2)= ", needle_angle
     if needle_angle < 0.0:
         needle_angle += 360
-    print "needle_angle: ", needle_angle
+    print "original_guess: ", needle_angle
+
+    angle_adjustment_set = np.arange(needle_angle-5.0,needle_angle+5.0,0.1)
+    sum_pixels = []
+    for adj_angle in angle_adjustment_set:
+        gauge.update_needle(adj_angle)
+        gauge.get_needle((circle_x, circle_y-10))
+        overlap = cv2.bitwise_and(thresholded, gauge.needle_canvas)
+        sum_pixels.append(np.sum(overlap/255))
+    adjustment_index = sum_pixels.index(max(sum_pixels))
+    needle_angle = angle_adjustment_set[adjustment_index]
+    gauge.update_needle(needle_angle)
+    gauge.get_needle((circle_x, circle_y-10))
+    needle_rgb = cv2.cvtColor(gauge.needle_canvas, cv2.COLOR_GRAY2BGR)
+    canvas = cv2.add(canvas, needle_rgb/2)
+    print "updated_guess: ", needle_angle
+
     pressure = np.interp(needle_angle, [DEF.GAUGE_MIN['angle'], DEF.GAUGE_MAX['angle']],
                          [DEF.GAUGE_MIN['pressure'], DEF.GAUGE_MAX['pressure']])
     pressure_str = str(round(pressure, 2))
     print "pressure = ", pressure
     display_values(canvas, pressure_str)
-
+    final_line_pt1 = (int(circle_x + radius * np.sin(geometry.degrees_to_radians(needle_angle))), int(circle_y - radius * np.cos(geometry.degrees_to_radians(needle_angle))))
+    final_line_pt2 = (int(circle_x + radius * np.sin(geometry.degrees_to_radians(needle_angle + 180))), int(circle_y - radius * np.cos(geometry.degrees_to_radians(needle_angle + 180))))
+    cv2.line(canvas, final_line_pt1, final_line_pt2, DEF.RED, thickness=DEF.THICKNESS*2)
     prep = cv2.bitwise_and(prep, mask)
-    plt.subplot(231)
-    plt.imshow(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
-    plt.subplot(232)
-    plt.imshow(255 - mask_bandpass, 'gray')
-    plt.subplot(233)
-    plt.imshow(prep, 'gray')
-    plt.subplot(234)
-    plt.imshow(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
-    plt.subplot(235)
-    plt.plot(hist0)
-    plt.xlim([0, 256])
-    plt.ylim([0, 50000])
+    # plt.subplot(231)
+    # plt.imshow(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
+    # plt.subplot(232)
+    # plt.imshow(255 - mask_bandpass, 'gray')
+    # plt.subplot(233)
+    # plt.imshow(prep, 'gray')
+    # plt.subplot(234)
+    # plt.imshow(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
+    # plt.subplot(235)
+    # plt.plot(hist0)
+    # plt.xlim([0, 256])
+    # plt.ylim([0, 50000])
     # plt.show()
+
+    cv2.circle(prep, (circle_x, circle_y), 25, (0, 255, 0), DEF.THICKNESS)
+    prep = cv2.cvtColor(prep, cv2.COLOR_GRAY2BGR)
+    canvas = np.concatenate((im, canvas), axis=1)
     host.write_to_file('w', "Pressure: " + pressure_str + " MPa", "Temperature: " + str(host.read_temp()))
     host.write_to_file('a', "circle_x:" + str(circle_x), "circle_y:" + str(circle_y), "radius:" + str(radius))
     # pass in tuples ("filename.ext", img_to_write)
-    # host.write_image(("prep.jpg", prep), ("canvas.jpg", canvas), ("orig_im.jpg", im))
-    prep = cv2.cvtColor(prep, cv2.COLOR_GRAY2BGR)
-    canvas = np.concatenate((prep, canvas), axis=1)
-    cv2.imshow('gauge', canvas)
-    cv2.waitKey(0)
+    image_path = re.sub('file', str(output_file), DEF.OUTPUT_PATH)
+    host.write_image((image_path, canvas))
+    image_path = re.sub('file', str(output_file), DEF.THRESH_PATH)
+    host.write_image((image_path, thresholded))
+    # cv2.imshow('gauge', canvas)
+    # cv2.waitKey(0)
+
+
+def main():
+    # parameters
+    files = []
+    for i in range(0, 36):
+        files.append(str(i).zfill(3))
+    # instance of OS class that contains all interactions with host machine
+
+    # files = ['010']
+    for file_name in files:
+        print file_name
+        app(file_name, file_name)
 
     return True
 
