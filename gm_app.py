@@ -218,7 +218,7 @@ def app(input_file, output_file):
     host.write_image((image_path, canvas))
     image_path = re.sub('file', str(output_file), DEF.THRESH_PATH)
     host.write_image((image_path, thresholded))
-    
+
 
 
 def main():
