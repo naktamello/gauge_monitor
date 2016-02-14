@@ -211,13 +211,14 @@ def app(input_file, output_file):
     cv2.circle(prep, (circle_x, circle_y), 25, (0, 255, 0), DEF.THICKNESS)
     prep = cv2.cvtColor(prep, cv2.COLOR_GRAY2BGR)
     canvas = np.concatenate((im, canvas), axis=1)
-    host.write_to_file('w', "Pressure: " + pressure_str + " MPa", "Temperature: " + str(host.read_temp()))
+    host.write_to_file('w', "pressure:" + pressure_str, "temperature:" + str(host.read_temp()))
     host.write_to_file('a', "circle_x:" + str(circle_x), "circle_y:" + str(circle_y), "radius:" + str(radius))
     # pass in tuples ("filename.ext", img_to_write)
     image_path = re.sub('file', str(output_file), DEF.OUTPUT_PATH)
     host.write_image((image_path, canvas))
     image_path = re.sub('file', str(output_file), DEF.THRESH_PATH)
     host.write_image((image_path, thresholded))
+    
 
 
 def main():
