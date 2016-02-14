@@ -1,6 +1,6 @@
-2016-02-10 09:45:58.139638
-Pressure: 3.43 MPa
+2016-02-14 13:49:30.492061
+Pressure: 3.46 MPa
 Temperature: OFF
 circle_x:491
-circle_y:529
-radius:330
+circle_y:519
+radius:324

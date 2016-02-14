@@ -10,11 +10,18 @@ import hough_transforms
 import geometry
 import process_image
 import housekeeping
+import argparse
 
 try:
     from matplotlib import pyplot as plt
 except ImportError:
     "matplotlib_pyplot not found"
+
+ap = argparse.ArgumentParser()
+group = ap.add_mutually_exclusive_group(required=True)
+group.add_argument("-i", "--image", help = "image # in ./img_samples folder")
+group.add_argument("-a", "--all", help = "process all images in ./img_samples", action="store_true")
+args = vars(ap.parse_args())
 
 window_name = 'gauge'
 
@@ -200,19 +207,6 @@ def app(input_file, output_file):
     final_line_pt2 = (int(circle_x + radius * np.sin(geometry.degrees_to_radians(needle_angle + 180))), int(circle_y - radius * np.cos(geometry.degrees_to_radians(needle_angle + 180))))
     cv2.line(canvas, final_line_pt1, final_line_pt2, DEF.RED, thickness=DEF.THICKNESS*2)
     prep = cv2.bitwise_and(prep, mask)
-    # plt.subplot(231)
-    # plt.imshow(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
-    # plt.subplot(232)
-    # plt.imshow(255 - mask_bandpass, 'gray')
-    # plt.subplot(233)
-    # plt.imshow(prep, 'gray')
-    # plt.subplot(234)
-    # plt.imshow(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
-    # plt.subplot(235)
-    # plt.plot(hist0)
-    # plt.xlim([0, 256])
-    # plt.ylim([0, 50000])
-    # plt.show()
 
     cv2.circle(prep, (circle_x, circle_y), 25, (0, 255, 0), DEF.THICKNESS)
     prep = cv2.cvtColor(prep, cv2.COLOR_GRAY2BGR)
@@ -224,18 +218,18 @@ def app(input_file, output_file):
     host.write_image((image_path, canvas))
     image_path = re.sub('file', str(output_file), DEF.THRESH_PATH)
     host.write_image((image_path, thresholded))
-    # cv2.imshow('gauge', canvas)
-    # cv2.waitKey(0)
 
 
 def main():
     # parameters
-    files = []
-    for i in range(0, 36):
-        files.append(str(i).zfill(3))
+    if args["all"]:
+        files = []
+        for i in range(0, 36):
+            files.append(str(i).zfill(3))
     # instance of OS class that contains all interactions with host machine
+    else:
+        files = [args["image"]]
 
-    # files = ['010']
     for file_name in files:
         print file_name
         app(file_name, file_name)

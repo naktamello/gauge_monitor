@@ -65,8 +65,8 @@ class OS:
         self.temperature = temp_sensor.read_temp()
         return self.temperature
 
-    def get_image(self, file_name, input_path):
-        if self.running_on_pi:
+    def get_image(self, file_name, input_path, use_cam=False):
+        if self.running_on_pi and use_cam:
             subprocess.call("gpio write 4 1", shell=True)
             time.sleep(0.1)
             #camera.start_preview()
@@ -89,12 +89,13 @@ class OS:
         for img in imgs:
             cv2.imwrite(img[0], img[1])
 
-    @staticmethod
     def show_image(self, img):
         if self.running_on_pi:
-            if os.path.exists("./canvas.jpg"):
-                subprocess.call("sudo fbi -T 1 canvas.jpg", shell=True)
-            pass
+            # if os.path.exists("./canvas.jpg"):
+            #     subprocess.call("sudo fbi -T 1 canvas.jpg", shell=True)
+            self.write_image(("./output.jpg",img))
+            if os.path.exists("./output.jpg"):
+                subprocess.call("sudo fbi -T 1 output.jpg", shell=True)
         else:
             pass
             # cv2.imshow(window_name, img)
